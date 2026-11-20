@@ -28,18 +28,21 @@ anygrasp_pp/          library
   contact_rig.py      floating Franka hand + hidden-weight object; pad and contact models (B)
   rig_trial.py        one grasp-lift-hold trial with full contact monitoring; twist-onset search
   objects.py          scanned objects as solids: hidden core, mass properties, fidelity of the collision pieces (H)
-  scene.py            table, overhead depth camera, camera <-> world frames, resting poses (I)
+  scene.py            table, bin, overhead D435 depth camera, camera <-> world frames, resting poses (I)
+  robot.py            Panda with the step-1 hand, computed-torque control, IK, grasp -> hand pose (J)
 scripts/
   calibrate_contact.py    step 1 sweeps and the parameter check (appendix R.1, R.2)
   characterize_contact.py non-ideal grasps: yaw, offsets, curvature, tilt, lift speed (R.3)
   panda_m3_numbers.py     test-lift accuracy and tare numbers from the real Panda arm (E.2, E.5)
-  check_derivations.py    independent checks of every derivation (81 checks)
+  check_derivations.py    independent checks of every derivation (85 checks)
   select_objects.py       object selection over all 1030 scanned objects (D16)
   render_candidates.py    contact sheet of candidate objects (needs a GL context, e.g. MUJOCO_GL=egl)
   graspability_test.py    resting pose, overhead render (D435 depth model) and detector test per candidate (D16)
   convert_ycb.py          YCB scans into the same layout as the scanned-objects library
   make_collision.py       CoACD collision pieces, the same settings for every object
   final_set.py            the study's object set from the test results (results/objects/final_set.csv)
+  run_b0.py               B0 trials: settle + render, then execute the detector's best reachable grasp (D18)
+  analyze_b0.py           midpoint numbers: success by shift, no-shift rate, failure point d50 vs d*
   setup_assets.sh         downloads the robot model; verifies the detector weights
 gpu/                      runs on a rented Linux GPU, not on the Mac
   setup_gpu.sh            pinned detector environment (full build, or reuse saved wheels)
@@ -84,7 +87,7 @@ The saved wheels run on RTX 30xx/40xx, A-series, A100 and L4/L40 cards (sm_80/86
 ## Reproduce step 1
 
 ```bash
-python scripts/check_derivations.py       # ~5 min, expects 81/81
+python scripts/check_derivations.py       # ~5 min, expects 85/85
 python scripts/panda_m3_numbers.py        # seconds
 python scripts/calibrate_contact.py       # ~15 min
 python scripts/characterize_contact.py --contact rubber   # ~15 min

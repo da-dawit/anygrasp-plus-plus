@@ -173,21 +173,43 @@ def object_xml(tag, model_dir, ob, shift, pos, R, collision="vhacd", mu=MU, pads
     return "\n".join(assets), body
 
 
-def scene_xml(object_snippets, timestep=0.002, impratio=10, contact=CONTACT, cam_pos=CAM_POS, cam_target=PICK):
+BIN_CENTER = PICK + np.array([0.0, 0.52, 0.0])   # outside the camera crop; a 40 cm object fits inside
+BIN_INNER, BIN_WALL_H, BIN_WALL_T = 0.40, 0.10, 0.01
+
+
+def bin_geoms():
+    c, h, t, w = BIN_CENTER, BIN_WALL_H, BIN_WALL_T, BIN_INNER / 2
+    walls = [((c[0], c[1] - w - t / 2), (w + t, t / 2)), ((c[0], c[1] + w + t / 2), (w + t, t / 2)),
+             ((c[0] - w - t / 2, c[1]), (t / 2, w)), ((c[0] + w + t / 2, c[1]), (t / 2, w))]
+    return "\n".join(f'<geom name="bin{k}" type="box" pos="{p[0]:.4f} {p[1]:.4f} {TABLE_Z + h / 2:.4f}" '
+                     f'size="{s[0]:.4f} {s[1]:.4f} {h / 2:.4f}" rgba="0.3 0.45 0.6 1"/>'
+                     for k, (p, s) in enumerate(walls))
+
+
+def in_bin(p):
+    """Is a point inside the bin's interior footprint and below its rim?"""
+    return bool(abs(p[0] - BIN_CENTER[0]) < BIN_INNER / 2 and abs(p[1] - BIN_CENTER[1]) < BIN_INNER / 2
+                and p[2] < TABLE_Z + BIN_WALL_H)
+
+
+def scene_xml(object_snippets, timestep=0.002, impratio=10, contact=CONTACT, cam_pos=CAM_POS, cam_target=PICK,
+              robot=None, with_bin=False):
     x, y = look_at(cam_pos, cam_target)
     cr = np.asarray(cam_pos) + STEREO_BASELINE * x          # the D435's right imager (I.4)
     assets = "\n".join(a for a, _ in object_snippets)
     bodies = "\n".join(b for _, b in object_snippets)
     return f"""
 <mujoco model="anygrasp_pp_scene">
-  <compiler angle="radian" autolimits="true"/>
+  <compiler angle="radian" autolimits="true"{f' meshdir="{robot["meshdir"]}"' if robot else ""}/>
   <option timestep="{timestep}" integrator="implicitfast" cone="elliptic" impratio="{impratio}"
           noslip_iterations="{contact.get('noslip', 0)}"/>
   <visual><global offwidth="{CAM_W}" offheight="{CAM_H}"/><map znear="0.05" zfar="4"/></visual>
+  {"<default>" + robot["default"] + "</default>" if robot else ""}
   <asset>
     <texture name="grid" type="2d" builtin="checker" rgb1="0.82 0.74 0.6" rgb2="0.78 0.7 0.56" width="64" height="64"/>
     <material name="table" texture="grid" texrepeat="8 8"/>
 {assets}
+{robot["asset"] if robot else ""}
   </asset>
   <worldbody>
     <light pos="0.5 -0.5 1.5" dir="0 0.3 -1" directional="true" diffuse="0.7 0.7 0.7"/>
@@ -198,7 +220,10 @@ def scene_xml(object_snippets, timestep=0.002, impratio=10, contact=CONTACT, cam
     <camera name="overhead_right" pos="{cr[0]:.6f} {cr[1]:.6f} {cr[2]:.6f}"
             xyaxes="{x[0]:.9f} {x[1]:.9f} {x[2]:.9f} {y[0]:.9f} {y[1]:.9f} {y[2]:.9f}" fovy="{CAM_FOVY:.9f}"/>
 {bodies}
+{robot["body"] if robot else ""}
+{bin_geoms() if with_bin else ""}
   </worldbody>
+{"".join(robot[k] for k in ("tendon", "equality", "contact", "actuator")) if robot else ""}
 </mujoco>"""
 
 

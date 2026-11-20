@@ -644,6 +644,32 @@ At the pick area ($z\approx0.65$\,m, $f = 927$\,px) this is 0.73\,mm, about the 
 \meta{I.4 [num] ($\sigma_z$ by Monte Carlo at three depths; left band width), [mj] (the shadow strip behind a rendered box)}{scene.realsense\_depth, scene.stereo\_shadow}
 
 % =====================================================================
+\section{Executing a grasp with the arm (B0)}
+
+\subsection{The arm controller}
+\textbf{Claim.} The arm's dynamics are $M(q)\ddot q + c(q,\dot q) + g(q) = \tau + \tau_{\text{ext}}$, where $\tau_{\text{ext}}$ collects everything the controller's model leaves out (the held object, contacts). With the control law
+\begin{equation}\label{eq:ctrl}
+\tau = M(q)\,\ddot q_d + c(q,\dot q) + g(q) + K_p(q_d - q) + K_d(\dot q_d - \dot q),
+\end{equation}
+the tracking error $e = q_d - q$ obeys $M(q)\,\ddot e + K_d\,\dot e + K_p\,e = -\tau_{\text{ext}}$. So with no external load $e\to0$, and a constant load leaves the steady error $e = -K_p^{-1}\tau_{\text{ext}}$ (the payload ``sag'').
+
+\textbf{Derivation.} Substitute \eqref{eq:ctrl} into the dynamics: $M\ddot q = M\ddot q_d + K_p e + K_d\dot e + \tau_{\text{ext}}$, i.e.\ $M(\ddot q_d - \ddot q) + K_d\dot e + K_p e = -\tau_{\text{ext}}$. With $\tau_{\text{ext}}$ constant and $e$ at rest, $K_p e = -\tau_{\text{ext}}$. Since $M\succ0$ and $K_p, K_d\succ0$ (diagonal, positive), the homogeneous system is exponentially stable (the energy $\tfrac12\dot e^{\mathsf T}M\dot e + \tfrac12 e^{\mathsf T}K_pe$ decreases at rate $\dot e^{\mathsf T}K_d\dot e$ when $M$ varies slowly). \hfill $\square$
+
+\textbf{In the simulator.} $M$, $c$ and $g$ come from the arm-and-hand model; the object is a separate body, so the controller, like the real Panda's, does not know the payload. The gains are libfranka's joint-impedance example ($K_p = \text{diag}(600,600,600,600,250,150,50)$, $K_d = \text{diag}(50,50,50,20,20,20,10)$), and $\tau$ is clipped at the Panda's limits (87\,N\,m on joints 1--4, 12\,N\,m on 5--7). The links have no \texttt{gravcomp} (decisions D12): gravity really acts and the controller really cancels it, so the joint torques carry the payload for M3.
+\note{The first version had no $M\ddot q_d$ term. It lagged its own trajectory by 13\,mm at the end of the descent, the fingers closed before the hand arrived and missed the object. With the feedforward term the lag is about 0.1\,mm, and the gripper also waits until the hand is within 1\,mm before closing.}
+\meta{J.1 [mj] (holds a pose exactly; the sag under a known payload equals $K_p^{-1}J^{\mathsf T}\bm F$; tracking error during a move)}{robot.Panda.control}
+
+\subsection{From a detector grasp to the hand pose}
+\textbf{Claim.} GraspNet's grasp has rotation $R$ with columns approach $\bm a$, closing direction $\bm c$ and finger height, centre $\bm t$ on the object surface, and fingertip depth $\delta$ past $\bm t$. The Panda grasps it with its TCP (the centre between the two pads) at $\bm t + (\delta - h)\,\bm a$, where $h = 8.5$\,mm is half the pad height, and hand axes $[\bm c\times\bm a,\ \bm c,\ \bm a]$. Rotating $R$ by $\pi$ about $\bm a$ ($\bm c\to-\bm c$) gives the same grasp; both are tried.
+
+\textbf{Derivation.} The Panda's fingertip is the far end of its pad, $h$ beyond the pad centre along the approach, so placing the fingertip at depth $\delta$ puts the pad centre at $\delta - h$. The hand's $z$ axis points along the approach and its fingers move along $y$, so $z = \bm a$, $y = \bm c$, and $x = y\times z = \bm c\times\bm a$. This is right-handed: $x\times y = (\bm c\times\bm a)\times\bm c = \bm a(\bm c\cdot\bm c) - \bm c(\bm a\cdot\bm c) = \bm a = z$. The two-finger hand is symmetric under a half turn about its approach axis. \hfill $\square$
+\meta{J.2 [num] (orthonormal, $\det = 1$, axes and pad centre as claimed; the half-turn grasp is the same pair of pad positions)}{robot.grasp\_to\_tcp}
+
+\subsection{Velocity and acceleration of the minimum-jerk path}
+With $u = t/T$ and $s = 10u^3 - 15u^4 + 6u^5$ (D.1): $\dot s = (30u^2 - 60u^3 + 30u^4)/T$ and $\ddot s = (60u - 180u^2 + 120u^3)/T^2$, by the chain rule ($du/dt = 1/T$). A joint path $q = q_0 + (q_1 - q_0)s$ then has $\dot q = (q_1-q_0)\dot s$ and $\ddot q = (q_1-q_0)\ddot s$, which feed \eqref{eq:ctrl}.
+\meta{J.3 [num] (against finite differences)}{robot.min\_jerk\_scale}
+
+% =====================================================================
 \appendix
 \renewcommand{\thesection}{R}
 \section{Results: contact calibration (step 1)}

@@ -637,5 +637,66 @@ check("I.4", "mj", np.abs(width - want_w).max() <= 1.5 and stray == 0,
       f"shadow strip behind a 10 cm box: {width.min()}-{width.max()} px wide (f b (1/z1 - 1/z2) = {want_w:.1f} px); "
       f"{stray} false holes on the open table")
 
+# ---------------------------------------------------------------- J. executing a grasp with the arm
+from anygrasp_pp import robot as RB  # noqa: E402
+
+mr = mujoco.MjModel.from_xml_string(SC.scene_xml([], robot=RB.panda_parts()))
+dr_ = mujoco.MjData(mr)
+arm_ = RB.Panda(mr)
+arm_.set_q(dr_, RB.Q_READY)
+mujoco.mj_forward(mr, dr_)
+while dr_.time < 1.0:
+    arm_.control(dr_, RB.Q_READY, np.zeros(7))
+    mujoco.mj_step(mr, dr_)
+e_hold = np.abs(dr_.qpos[arm_.qadr] - RB.Q_READY).max()
+F = np.array([0.0, 0.0, -10.0])                                      # a known 10 N load on the hand
+dr_.xfrc_applied[arm_.hand, :3] = F
+while dr_.time < 4.0:
+    arm_.control(dr_, RB.Q_READY, np.zeros(7))
+    mujoco.mj_step(mr, dr_)
+Jp_ = np.zeros((3, mr.nv))
+mujoco.mj_jac(mr, dr_, Jp_, None, dr_.xipos[arm_.hand], arm_.hand)
+e_pred = np.linalg.solve(np.diag(RB.KP), Jp_[:, arm_.dadr].T @ F)  # q - q_d = Kp^-1 J^T F
+e_meas = dr_.qpos[arm_.qadr] - RB.Q_READY
+dr_.xfrc_applied[:] = 0
+check("J.1", "mj", e_hold < 1e-9 and np.abs(e_meas - e_pred).max() < 0.03 * np.abs(e_pred).max(),
+      f"holds a pose to {e_hold:.1e} rad; 10 N load sags {np.abs(e_meas).max() * 1e3:.3f} mrad vs Kp^-1 J^T F "
+      f"{np.abs(e_pred).max() * 1e3:.3f} mrad")
+arm_.set_q(dr_, RB.Q_READY)
+dr_.time = 0.0
+mujoco.mj_forward(mr, dr_)
+err_ff = 0.0
+while dr_.time < 2.0:
+    qd_, vd_, ad_ = RB.min_jerk(RB.Q_READY, RB.Q_CAPTURE, 2.0, dr_.time)
+    arm_.control(dr_, qd_, vd_, ad_)
+    mujoco.mj_step(mr, dr_)
+    err_ff = max(err_ff, np.abs(qd_ - dr_.qpos[arm_.qadr]).max())
+check("J.1", "mj", err_ff < 2e-3, f"tracking error during a 90 deg base turn in 2 s: {err_ff * 1e3:.3f} mrad")
+
+ok_j2 = True
+for _ in range(200):
+    Rg = Rot.random(random_state=rng.integers(1 << 31)).as_matrix()
+    tg_, dep = rng.normal(size=3), rng.uniform(0.01, 0.04)
+    p_, Rh = RB.grasp_to_tcp(Rg, tg_, dep)
+    Rf = Rg.copy()
+    Rf[:, 1:] *= -1
+    p2_, Rh2 = RB.grasp_to_tcp(Rf, tg_, dep)
+    w_ = 0.05
+    pads1 = {tuple(np.round(p_ + s_ * w_ / 2 * Rh[:, 1], 12)) for s_ in (-1, 1)}
+    pads2 = {tuple(np.round(p2_ + s_ * w_ / 2 * Rh2[:, 1], 12)) for s_ in (-1, 1)}
+    ok_j2 &= (close(Rh.T @ Rh, np.eye(3), atol=1e-12) and abs(np.linalg.det(Rh) - 1) < 1e-12
+              and close(Rh[:, 2], Rg[:, 0]) and close(Rh[:, 1], Rg[:, 1])
+              and close(p_, tg_ + (dep - 0.0085) * Rg[:, 0]) and pads1 == pads2)
+check("J.2", "num", ok_j2, "hand frame orthonormal and right-handed, z = approach, y = closing, pad centre at "
+      "t + (depth - h) a; the half-turn grasp puts the pads in the same two places")
+
+T_, ts_ = 1.3, np.linspace(0.05, 1.25, 25)
+h_ = 1e-6
+fd_ok = all(abs((RB.min_jerk_scale(T_, t + h_)[0] - RB.min_jerk_scale(T_, t - h_)[0]) / (2 * h_)
+                - RB.min_jerk_scale(T_, t)[1]) < 1e-6
+            and abs((RB.min_jerk_scale(T_, t + h_)[1] - RB.min_jerk_scale(T_, t - h_)[1]) / (2 * h_)
+                    - RB.min_jerk_scale(T_, t)[2]) < 1e-5 for t in ts_)
+check("J.3", "num", fd_ok, "minimum-jerk velocity and acceleration match finite differences")
+
 print(f"\n{sum(results)}/{len(results)} checks passed")
 sys.exit(0 if all(results) else 1)

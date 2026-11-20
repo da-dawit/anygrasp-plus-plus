@@ -21,6 +21,7 @@ Every change from the proposal (`proposal/proposal_final.tex`), with the reason 
 | D15 | Hidden-weight objects weigh 1.0 kg (was 0.6 kg) | 2026-11-20 |
 | D16 | Hidden weight is a dense core in the object's heavy end; 10 objects from 1108 scans (GSO + YCB) | 2026-11-20 |
 | D17 | Simulated depth follows a RealSense D435 (stereo noise, shadows, edge dropout, 1 mm units) | 2026-11-20 |
+| D18 | B0 execution protocol: scene, grasp choice, controller, motion, outcome labels | 2026-11-20 |
 
 ---
 
@@ -279,3 +280,42 @@ The depth model is what admits the YCB hammer and drill: with ideal depth GSNet 
 The noise is seeded per scene. Checks: σ_z matches z²σ_d/(fb) by Monte Carlo within 0.4%; the left band is 71 columns (71.3 predicted); the shadow strip behind a 10 cm box is 13 px (13.0 predicted) with no false holes on the open table.
 
 **Effect:** with the model on, the YCB hammer and drill get usable grasps at every yaw. On the scanned objects the same 6 pass either way.
+
+## D18. B0 execution protocol
+
+Fixed before the first full B0 run (`scripts/run_b0.py`, `anygrasp_pp/robot.py`; derivations J).
+
+**Scene.**
+- The Menagerie Panda (pinned commit) at the origin, with the step-1 hand: 4×4 rubber grid pads and a force-clamped gripper at 70 N per pad (D4–D7).
+- The table at z = 0, and the overhead camera of D17.
+- The bin centre is 52 cm from the pick area, with a 40 × 40 cm interior and 10 cm walls. The longest object (40 cm) fits, and the bin stays outside the camera's crop. The proposal said 40 cm.
+
+**Trial.**
+- One object, one CoM shift (0, 2, 4, 6, 8 cm), one seed.
+- The seed sets the yaw (uniform) and a ±3 cm position jitter of the object's most probable resting pose (D16). The same seed gives the same pose at every shift.
+- The object settles for 1 s with the arm parked at the side (out of the camera's view). The D435 image is rendered and GSNet runs on it, once per trial.
+- 10 objects × 5 shifts × 6 seeds = 300 trials.
+
+**B0's grasp** (the proposal's "best-scoring grasp that IK can reach"). In the detector's order (collision-free, NMS, best score first), the first grasp that:
+- approaches within 30° of vertical (D3);
+- reports a width of at most 8 cm (D14);
+- sits on the object;
+- has IK solutions for the pre-grasp (10 cm back along the approach), the grasp, the lift (10 cm up) and the pose above the bin. The wrist may turn about the vertical for the carry.
+
+Both closing directions of each grasp are tried. Whole-arm collision checks are M1's job, not B0's.
+
+**Control and motion** (J.1–J.3).
+- Controller: computed-torque feedforward plus joint impedance with libfranka's gains, clipped at the Panda's torque limits. It knows the arm and hand, not the payload.
+- Motion: reach in 2.5 s (minimum-jerk in joint space), then descend along the approach in 1.5 s.
+- Close only when the hand is within 1 mm (at most 1 s of waiting), at 0.1 m/s per finger until 70 N per pad, then squeeze 0.5 s. This is step 1's gripper.
+- Lift 10 cm in 1.2 s (step 1's profile), hold 2 s, carry to the bin in 2.5 s, lower until the object is 4 cm above the bin floor, and release.
+
+**Outcome** (D2). Success = the object ends in the bin, was not dropped before release, and never turned more than 10° in the hand (tilt; turning about the approach axis is not a failure) between the lift and the release. Failures are labelled by what happened first:
+- no reachable grasp;
+- no grip, blocked on approach (the hand stopped more than 5 mm short);
+- no grip, closed on air;
+- turned in hand;
+- dropped;
+- missed the bin.
+
+The lever arm d is measured at the end of the squeeze from the pad midpoint, the closing axis and the true CoM (A.2).
