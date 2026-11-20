@@ -17,7 +17,9 @@ Every change from the proposal (`proposal/proposal_final.tex`), with the reason 
 | D11 | Wording fixes to the proposal | 2026-11-17 |
 | D12 | Full-arm scene rules for step 2 | 2026-11-17 |
 | D13 | New control "B0 + blind retry" (professor's required change) | 2026-11-20 |
-| D14 | Detector runs: pinned GPU environment, cached once per scene; Panda width rule still open | 2026-11-20 |
+| D14 | Detector runs: pinned GPU environment, cached once per scene; Panda width rule | 2026-11-20 |
+| D15 | Hidden-weight objects weigh 1.0 kg (was 0.6 kg) | 2026-11-20 |
+| D16 | Hidden weight is a dense core in the object's heavy end; object selection from all 1030 scans | 2026-11-20 |
 
 ---
 
@@ -199,6 +201,52 @@ The margin ρ is the large-certainty limit of the same rule (F.2).
 
 **Pipelines follow the authors' inference scripts exactly** (`gpu/detect_grasps.py`): GSNet with 15000 points and 5 mm voxels; the baseline with 20000 points, 300 views, 12 angles and 4 depths. Then the authors' model-free collision check (1 cm voxels, 5 cm approach, 1 cm threshold) and graspnetAPI NMS (3 cm, 30°). The cache stores the raw network output, the collision mask and the NMS order, so filters such as D3 are applied later without rerunning the network. Point sampling is seeded per scene, and a rerun reproduces the output bit for bit (checked on the authors' example scene).
 
-**Open: the Panda width rule.** Both detectors report width = 1.2 × predicted object thickness, clamped at 10 cm (they were trained for a 10 cm gripper). The Panda opens to 8 cm. On the authors' example scene only 6 of the baseline's top 20 grasps report ≤ 8 cm. Proposed rule for every method: keep a grasp only if its reported width ≤ 8 cm, which keeps the authors' 20% clearance. To fix before step 3.
+**Panda width rule (decided 2026-11-20).** Both detectors report width = 1.2 × predicted object thickness, clamped at 10 cm (they were trained for a 10 cm gripper). The Panda opens to 8 cm. On the authors' example scene only 6 of each detector's top 20 grasps report ≤ 8 cm. Rule for every method: keep a grasp only if its reported width ≤ 8 cm. This keeps the authors' 20% clearance, so objects up to 6.7 cm thick are graspable.
 
 **Effect on the plan:** the retry in B0 + blind retry (D13) and AnyGrasp++'s regrasp both happen after a set-down that can move the object, so they need a second detection on the new scene. Detection therefore runs in two batched passes on the GPU: initial scenes, then post-set-down scenes. The setup above is built to be reused for that.
+
+## D15. Hidden-weight objects weigh 1.0 kg (was 0.6 kg)
+
+**Why:** the proposal chose 0.6 kg so that the slip distance d\* (4.7 cm under the point-contact model) sat in the middle of the 0–8 cm shifts. B0 should then hold on one side of d\* and fail on the other, which is what the failure-point fit and the main comparison need. The realistic fingertip of D4 is stronger in torsion: at 0.6 kg its d\* is 7.5 cm at rest and 7.2 cm at the lift's peak acceleration, close to the top of the range, so B0 would rarely fail.
+
+**Numbers** (`physics.patch_dstar`, 4×4 grid pad, 70 N per pad, at rest / at the lift's peak acceleration 0.40 m/s²):
+
+| mass | d\* at μ = 0.5 | d\* at μ = 0.8 |
+|---|---|---|
+| 0.6 kg | 7.53 / 7.23 cm | 12.08 / 11.61 cm |
+| 0.8 kg | 5.62 / 5.39 cm | 9.05 / 8.69 cm |
+| **1.0 kg** | **4.47 / 4.29 cm** | **7.22 / 6.93 cm** |
+| 1.2 kg | 3.70 / 3.55 cm | 6.00 / 5.76 cm |
+
+At 1.0 kg, d\* returns to the proposal's design point in the middle of the shift range at μ = 0.5. The μ = 0.8 repeat still has d\* inside the range. 1 kg is an ordinary household weight (hammer, drill, full bottle) and well under the Panda's 3 kg payload. The shifts (0, 2, 4, 6, 8 cm) and everything else stay as proposed.
+
+**Chosen 2026-11-20** to keep the test hard and realistic.
+
+## D16. Hidden weight is a dense core in the heavy end; object selection from all 1030 scans
+
+**The hidden weight must physically fit.** The proposal placed an invisible point mass (B.2). At 1.0 kg an 8 cm shift needs about 0.8 kg of hidden mass, and even tungsten (19.3 g/cm³, the densest practical filler) needs about 41 cm³ for that, a slug about 4 cm across. The proposal's own example, a weight inside a spatula blade, could not exist. So the hidden weight is now a **core**: the end cap of the object beyond a cut plane, inside a 2 mm skin, filled with denser material. Think of a hammer head, the batteries at one end of a flashlight, or sand at the bottom of a bottle. The rest of the object is a uniform shell. The cut is chosen once per object, as the outermost one that reaches the 8 cm shift with the core at or below tungsten density and at least 100 g left in the shell. The same core is used at every shift and only the two densities change, so the object looks identical at every shift (derivations H.2; the voxel CoM equals the target shift to 1e-12 m).
+
+**Selection pipeline** (`scripts/select_objects.py`, `anygrasp_pp/objects.py`), run on all 1030 MuJoCo scanned objects:
+
+1. Surface survey: length 18–45 cm and some part thin enough for the width rule (D14). 289 of 1030 pass.
+2. Solid survey of the collision solid: the core is feasible (244) and at least 5 cm of the length is graspable (181).
+3. A single rigid piece (153). Sets of loose items (furniture sets, game pieces, tea sets) are found automatically by counting separate pieces after closing gaps under 2 mm.
+4. Not footwear (31; shoes are deformable), and not in `results/objects/exclusions.csv` (17). That file gives the reason for each by-eye exclusion: soft items, cords and strings the scan made rigid, and stacks of loose pieces scanned while touching.
+
+Relaxing the length to 15 cm or the shell to 50 g adds no objects; the 8 cm shift at 1 kg is the binding limit.
+
+**Final test** (`scripts/graspability_test.py`; results in `results/objects/gtest/`). Each of the 17 is placed in its most probable resting pose whose support polygon holds the CoM with 5 mm to spare at every shift (derivations I.3). It is simulated for 1 s at shift 0 and 8 cm and must move less than 5 mm. It is rendered by the overhead camera at four yaws and run through both detectors, using the authors' workspace crop (I.1). It passes if every yaw gives at least 3 grasps that are collision-free, report a width ≤ 8 cm (D14), sit on the object and approach within the angle limit.
+
+- Physics removes three: the teapot has no pose stable at every shift, one track piece rolls 395 mm, and one action figure tips over at 8 cm.
+- The angle limit decides the rest. Objects passing (of 17):
+
+| approach limit | 30° (D3) | 45° | 60° | none |
+|---|---|---|---|---|
+| GSNet | 5 | 6 | 8 | 12 |
+| graspnet-baseline | 5 | 8 | 12 | 12 |
+
+- At 30° only an elephant figure, an excavator toy, a shark toy, a bookend and a wooden track piece pass. The mallet, flashlight, dustpan and boxes get grasps, but GSNet's grasps on them are mostly steep side grasps (median 73° from vertical) or collide; on the flashlight the body is 7.5 cm, too wide for the hand.
+
+**Open (decided with the user next):** the realistic GSO set cannot supply 20 hidden-weight objects that the detector grasps reliably from above. The options are to relax D3, to add objects from another scanned set, or to run fewer objects with more seeds. Collision geometry (below) and the camera noise model (proposal L7) may also change GSNet's grasps, since it was trained on real, noisy depth.
+
+**Collision fidelity:** the scans' V-HACD collision pieces bulge a median 6.7 mm (95th percentile) beyond the visible surface, enough to put the fingers on material the camera cannot see. The chosen objects get new collision pieces from CoACD (named in the proposal), checked with the same bulge/gap measure (`objects.fidelity`).

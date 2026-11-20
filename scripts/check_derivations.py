@@ -497,5 +497,106 @@ ysep = (dl_ < 0.047).astype(float)
 lls = [ll(kk, 0.047, ysep) for kk in (1e2, 1e3, 1e4, 1e5)]
 check("G.4", "num", all(np.diff(lls) > 0), "perfectly separated data: likelihood keeps rising with k, so no finite MLE")
 
+# ---------------------------------------------------------------- H. hidden-weight objects
+from anygrasp_pp import objects as O  # noqa: E402
+
+hx, hy, hz = 0.12, 0.025, 0.02                       # half extents of a test box [m], long axis x
+box = np.array([[sx * hx, sy * hy, sz * hz] for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)])
+yaw = Rot.from_euler("xyz", [0.3, -0.2, 0.7]).as_matrix()           # tilted, so the axis must be found
+off = np.array([0.05, -0.02, 0.1])
+occ, org = O.occupancy([box @ yaw.T + off])
+pts = org + O.VOXEL * np.argwhere(occ)
+c_, ax_ = O.principal_frame(pts)
+check("H.1", "num", np.linalg.norm(c_ - off) < 1e-3 and abs(abs(ax_[0] @ yaw[:, 0]) - 1) < 1e-4,
+      f"box solid: centroid off by {np.linalg.norm(c_ - off) * 1e3:.2f} mm, long axis within "
+      f"{np.degrees(np.arccos(min(1, abs(ax_[0] @ yaw[:, 0])))):.3f} deg")
+
+Ms, ss, VFs, VSs, xFs, xSs, mFs = sp.symbols("M s V_F V_S xbar_F xbar_S m_F", real=True)
+sol = sp.solve([sp.Eq(VFs * xFs + VSs * xSs, 0), sp.Eq(mFs * xFs + (Ms - mFs) * xSs, Ms * ss)], [mFs, xSs], dict=True)[0]
+check("H.2", "sym", sp.simplify(sol[mFs] - Ms * (ss * VSs / xFs + VFs) / (VFs + VSs)) == 0,
+      "m_F = M (s V_S / xbar_F + V_F) / V from the CoM and centroid conditions")
+
+ob = {"points": pts, "centroid": c_, "axes": ax_}
+x_ = (pts - c_) @ ax_[0]
+idx_ = np.argwhere(occ)
+from scipy import ndimage as _nd  # noqa: E402
+er_ = _nd.binary_erosion(occ, iterations=1)[tuple(idx_.T)]
+core_ = O.choose_core(x_, er_)
+errs, dens_ok = [], True
+for s_ in O.SHIFTS:
+    p_ = O.mass_properties(pts, core_, s_)
+    errs.append(abs((p_["com"] - c_) @ (core_["sign"] * ax_[0]) - s_))
+    dens_ok &= p_["core_density"] <= O.RHO_MAX + 1e-6 and O.MASS - p_["core_mass"] >= O.MIN_SHELL - 1e-9
+p0 = O.mass_properties(pts, core_, 0.0)
+check("H.2", "num", core_ is not None and max(errs) < 1e-12 and dens_ok
+      and abs(p0["core_density"] - p0["shell_density"]) < 1e-9 * p0["shell_density"],
+      f"24 cm box: CoM at s for every shift (max error {max(errs):.1e} m), core <= tungsten, shell >= "
+      f"{O.MIN_SHELL * 1e3:.0f} g, uniform at s = 0 (core cap {core_['VF'] * 1e6:.1f} cm^3)")
+
+h_ = O.VOXEL
+nx, ny, nz = 60, 12, 10                              # a box of whole cubes, 12 x 2.4 x 2 cm
+g_ = np.stack(np.meshgrid(*[(np.arange(n) + 0.5) * h_ for n in (nx, ny, nz)], indexing="ij"), -1).reshape(-1, 3)
+fake = {"F": np.zeros(len(g_), bool), "VF": 1e-30, "VS": len(g_) * h_ ** 3, "xF": 1.0}   # no core: uniform box
+pI = O.mass_properties(g_, fake, 0.0)
+a_, b_, c3 = nx * h_, ny * h_, nz * h_
+I_an = O.MASS / 12 * np.diag([b_ ** 2 + c3 ** 2, a_ ** 2 + c3 ** 2, a_ ** 2 + b_ ** 2])
+check("H.3", "num", close(pI["inertia"], I_an, rtol=1e-9, atol=1e-15),
+      "inertia of a box made of whole cubes equals M(b^2+c^2)/12 etc. exactly (cube self-term h^2/6 included)")
+pB = O.mass_properties(pts, core_, 0.0)
+I_box = O.MASS / 3 * np.diag([hy ** 2 + hz ** 2, hx ** 2 + hz ** 2, hx ** 2 + hy ** 2])
+I_box = yaw @ I_box @ yaw.T
+check("H.3", "num", np.abs(pB["inertia"] - I_box).max() < 0.02 * np.abs(I_box).max(),
+      f"tilted box through the full voxel pipeline: inertia within "
+      f"{np.abs(pB['inertia'] - I_box).max() / np.abs(I_box).max() * 100:.2f}% of the closed form")
+
+# ---------------------------------------------------------------- I. camera and detector frames
+# depth tolerance 0.3 mm: far below RealSense noise (~1 mm) and the detector's 5 mm voxels; the GPU (EGL)
+# depth buffer reads ~0.1 mm differently from macOS
+from anygrasp_pp import scene as SC  # noqa: E402
+
+bx, by, bz, cx_, cy_ = 0.06, 0.04, 0.05, 0.52, -0.03          # box half sizes and centre (table at z = 0)
+xml_cam = SC.scene_xml([]).replace(
+    "</worldbody>", f'<geom name="probe" type="box" size="{bx} {by} {bz}" pos="{cx_} {cy_} {bz}" rgba="1 0 0 1"/>'
+                    "</worldbody>")
+mc = mujoco.MjModel.from_xml_string(xml_cam)
+dc = mujoco.MjData(mc)
+mujoco.mj_forward(mc, dc)
+optc = mujoco.MjvOption()
+with mujoco.Renderer(mc, SC.CAM_H, SC.CAM_W) as rr:
+    rr.enable_depth_rendering()
+    rr.update_scene(dc, camera="overhead", scene_option=optc)
+    dep = rr.render().copy()
+cid = mc.camera("overhead").id
+xm = dc.cam_xmat[cid].reshape(3, 3)
+Rwc = SC.R_world_cv(xm[:, 0], xm[:, 1])
+pw = SC.backproject(dep, SC.camera_K()) @ Rwc.T + dc.cam_xpos[cid]
+top = pw[(np.abs(pw[:, 0] - cx_) < bx - 0.005) & (np.abs(pw[:, 1] - cy_) < by - 0.005) & (pw[:, 2] > bz / 2)]
+onbox = pw[pw[:, 2] > 2 * bz - 0.001]
+ext = np.array([onbox[:, 0].min(), onbox[:, 0].max(), onbox[:, 1].min(), onbox[:, 1].max()])
+want = np.array([cx_ - bx, cx_ + bx, cy_ - by, cy_ + by])
+px = 0.7 / SC.camera_K()[0, 0]                                 # one pixel at 0.7 m, in metres
+check("I.1", "mj", len(top) > 1000 and np.abs(top[:, 2] - 2 * bz).max() < 3e-4 and np.abs(ext - want).max() < 1.5 * px,
+      f"rendered box: top face at {top[:, 2].mean() * 100:.3f} cm (want {2 * bz * 100:.1f}), edges within "
+      f"{np.abs(ext - want).max() * 1e3:.2f} mm (one pixel = {px * 1e3:.2f} mm)")
+check("I.1", "num", close(Rwc.T @ Rwc, np.eye(3), atol=1e-9) and abs(np.linalg.det(Rwc) - 1) < 1e-9,
+      "R_wc is a proper rotation")
+
+Rg = Rot.random(200, random_state=1).as_matrix()
+tg = rng.normal(size=(200, 3))
+gc = np.zeros((200, 17))
+gc[:, 4:13] = (Rwc.T @ Rg).reshape(200, 9)
+gc[:, 13:16] = (tg - dc.cam_xpos[cid]) @ Rwc
+Rb, tb = SC.grasps_to_world(gc, Rwc, dc.cam_xpos[cid])
+ang = np.degrees(np.arccos(np.clip(-Rg[:, 2, 0], -1, 1)))
+check("I.2", "num", close(Rb, Rg, atol=1e-12) and close(tb, tg, atol=1e-12)
+      and np.array_equal(SC.approach_ok_world(Rb, 30.0), ang <= 30.0),
+      "world -> camera -> world round trip; approach test equals the angle to straight down <= 30 deg")
+
+sq = np.array([[0, 0, 0], [0.1, 0, 0], [0.1, 0.1, 0], [0, 0.1, 0], [0.05, 0.05, 0.08]])
+m_in, m_edge, m_out = (SC._support_margin(sq, np.array(q)) for q in ([0.03, 0.05, 0.2], [0.1, 0.05, 0.2],
+                                                                    [0.13, 0.05, 0.2]))
+check("I.3", "num", abs(m_in - 0.03) < 1e-12 and abs(m_edge) < 1e-12 and abs(m_out + 0.03) < 1e-12,
+      "support margin of a 10 cm square: 3 cm inside, 0 on the edge, -3 cm outside")
+
 print(f"\n{sum(results)}/{len(results)} checks passed")
 sys.exit(0 if all(results) else 1)

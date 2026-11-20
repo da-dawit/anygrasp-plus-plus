@@ -278,6 +278,7 @@ The grid's mean point distance is 6.37\,mm, against 6.51\,mm for continuous unif
 \textbf{Derivation.} $\frac{(m-m_h)\cdot0 + m_hx_h}{m} = d$. This needs $d<x_h$. \hfill $\square$
 
 An 8\,cm shift needs $x_h\ge8.9$\,cm, so the object must be at least about 18\,cm long.
+\note{This point mass is used only by the calibration rig. The study's scanned objects use a hidden \emph{core} of real volume and at most tungsten's density (section H).}
 \fix{Version 1 also required the visible shell to keep $\ge10\%$ of the mass. That rule came from the averaged, softer contact (B.1, B.5) and no longer applies.}
 \meta{B.2 [mj]}{contact\_rig.build\_xml}
 
@@ -547,6 +548,83 @@ Intervals are therefore computed by the cluster bootstrap over objects.
 \textbf{Model and gradient.} $P = 1/(1+e^{k(d_{\text{eff}}-d_{50})})$. With $u_i = k(d_{50}-d_i)$ and $\sigma' = \sigma(1-\sigma)$: $\partial\ell/\partial d_{50} = k\sum(y_i-p_i)$ and $\partial\ell/\partial k = \sum(y_i-p_i)(d_{50}-d_i)$.
 \note{Simulated outcomes are nearly deterministic in $d_{\text{eff}}$ (R.1). If successes and failures are perfectly separated, the likelihood keeps rising as $k\to\infty$ and no finite maximum exists. So bound $k$, use Firth's penalized likelihood, or report the gap between the largest success and the smallest failure with a bootstrap. On the grid pad $d_{50}$ should be compared with the patch $\dstar$ for the contact that actually occurred, not with a fixed 4.74\,cm.}
 \meta{G.4 [num] (gradient; separated data has no finite MLE)}{(analysis)}
+
+% =====================================================================
+\section{Hidden-weight objects from scanned meshes}
+These are the study's objects (decisions D15, D16). B.2 is the simpler point-mass version used by the calibration rig.
+
+\subsection{The solid and its frame}
+\textbf{Definitions.} The solid $\Omega$ is the union of the object's convex collision pieces, sampled on a grid of cubes of side $h$ (2\,mm): a cube belongs to $\Omega$ when its centre lies inside some piece. Piece $j$ is the set $\{\bm p : A_j\bm p + \bm b_j \le \bm 0\}$ given by the outward facet planes of its convex hull. With $N$ cubes at centres $\bm p_i$, the volume is $V = Nh^3$, the centroid is $\bm c = \frac1N\sum_i \bm p_i$, and the long axis $\bm e$ is the first right-singular vector of the centred matrix $[\bm p_i - \bm c]$ (the direction of largest spread). Positions along the axis are $x_i = (\bm p_i - \bm c)\cdot\bm e$, so $\sum_i x_i = 0$.
+\meta{H.1 [num] (a box solid's centroid and long axis)}{objects.occupancy, objects.principal\_frame}
+
+\subsection{The heavy-end core}
+\textbf{Claim.} Split $\Omega$ into a core $F$ (an end cap beyond a cut plane, minus a 2\,mm skin) and the shell $S = \Omega\setminus F$, each of uniform density, with total mass $M$. With $V_F$, $V_S$ their volumes and $\bar x_F$ the core centroid's position along $\bm e$, the CoM lies at $s$ along $\bm e$ when the core mass is
+\begin{equation}\label{eq:core}
+m_F(s) = M\,\frac{s\,V_S/\bar x_F + V_F}{V_F + V_S}.
+\end{equation}
+
+\textbf{Derivation.}
+\begin{enumerate}[nosep]
+\item Because $\sum_i x_i = 0$ over the whole solid, $V_F\bar x_F + V_S\bar x_S = 0$, so $\bar x_S = -V_F\bar x_F/V_S$.
+\item The CoM along $\bm e$ is $\big(m_F\bar x_F + (M - m_F)\bar x_S\big)/M$. Set it to $s$ and substitute step 1: $Ms = m_F\bar x_F - (M - m_F)V_F\bar x_F/V_S$.
+\item Collect $m_F$: $m_F\,\bar x_F(1 + V_F/V_S) = Ms + MV_F\bar x_F/V_S$.
+\item Divide by $\bar x_F(1+V_F/V_S) = \bar x_F V/V_S$: $m_F = M(sV_S/\bar x_F + V_F)/V$. \hfill $\square$
+\end{enumerate}
+\textbf{Checks on the result.} At $s=0$, $m_F = MV_F/V$: both parts have density $M/V$, the uniform object. $m_F$ grows linearly in $s$. Densities: core $\rho_F = m_F/V_F$, shell $\rho_S = (M - m_F)/V_S$.
+
+\textbf{Choosing the cut.} For the largest shift $s_{\max} = 8$\,cm the core must stay physically possible: $\rho_F \le 19\,300$\,kg/m$^3$ (tungsten) and the shell must keep at least 100\,g. Of the cuts on either end that satisfy both, the outermost is used. That gives the smallest, most hidden core, like a hammer head or the batteries at one end of a flashlight. The same $F$ is used at every shift, so the object looks identical; only the two hidden densities change.
+
+\textbf{Sideways CoM.} The core centroid can sit slightly off the axis ($\bar y_F$, $\bar z_F$), which moves the CoM sideways by $(m_F - MV_F/V)\,\bar y_F\,V/(MV_S)$ along $y$ (steps 1--2 with $y$ in place of $x$), and likewise along $z$. The lever arm only depends on the CoM's component perpendicular to the closing axis, and the code computes it from the full 3-D CoM (A.2), so this is carried through rather than assumed zero.
+\meta{H.2 [sym] (the algebra), [num] (voxelized CoM equals $s$ at every shift; densities within limits)}{objects.core\_masses, objects.choose\_core}
+
+\subsection{Mass properties from the cubes}
+\textbf{Claim.} With cube masses $m_i$ (the core or shell density times $h^3$), CoM $\bm g = \sum m_i\bm p_i/\sum m_i$ and $\bm r_i = \bm p_i - \bm g$, the inertia about the CoM is
+\begin{equation}\label{eq:voxinertia}
+I = \sum_i m_i\big(|\bm r_i|^2 \mathbb{1} - \bm r_i\bm r_i^{\mathsf T}\big) + \frac{h^2}{6}\Big(\sum_i m_i\Big)\mathbb{1}.
+\end{equation}
+
+\textbf{Derivation.}
+\begin{enumerate}[nosep]
+\item A uniform cube of side $h$ and mass $m$ about its own centre: $I_{xx} = \int (y^2 + z^2)\,dm = m\big(\tfrac{h^2}{12} + \tfrac{h^2}{12}\big) = \tfrac{mh^2}{6}$, the same for every axis, with zero products of inertia by symmetry.
+\item Parallel-axis theorem: moving each cube's inertia to $\bm g$ adds $m_i(|\bm r_i|^2\mathbb{1} - \bm r_i\bm r_i^{\mathsf T})$.
+\item Sum over cubes. \hfill $\square$
+\end{enumerate}
+For a shape made of whole cubes the result is exact. For the scanned objects the only error is the 2\,mm sampling of the surface.
+\meta{H.3 [num] (exact for a box of whole cubes; within 2\% for a box through the full pipeline)}{objects.mass\_properties}
+
+% =====================================================================
+\section{The camera and the detector's frame}
+
+\subsection{From the depth image to points}
+\textbf{Claim.} A MuJoCo camera with vertical field of view $\phi$ and an image of $W\times H$ pixels is a pinhole camera with focal length $f = (H/2)/\tan(\phi/2)$ pixels and principal point $(c_x, c_y) = \big(\tfrac{W-1}{2}, \tfrac{H-1}{2}\big)$ in pixel-index coordinates. A pixel $(u, v)$ (column, row from the top-left) with planar depth $z$ is the point
+\begin{equation}\label{eq:backproject}
+\bm p_{\text{cv}} = \big((u - c_x)\,z/f,\ (v - c_y)\,z/f,\ z\big)
+\end{equation}
+in the OpenCV camera frame ($x$ right, $y$ down, $z$ forward). The world point is $\bm p_w = \bm o + R_{wc}\,\bm p_{\text{cv}}$ with $R_{wc} = [\,\bm x_{\text{cam}},\ -\bm y_{\text{cam}},\ -\bm z_{\text{cam}}\,]$ (columns), where $\bm o$ and $\bm x_{\text{cam}}, \bm y_{\text{cam}}, \bm z_{\text{cam}}$ are MuJoCo's camera position and axes.
+
+\textbf{Derivation.}
+\begin{enumerate}[nosep]
+\item MuJoCo's camera looks along $-\bm z_{\text{cam}}$ with $\bm y_{\text{cam}}$ up, and its vertical field of view spans the image height: a point at depth $z$ on the top edge has $y_{\text{cam}}/z = \tan(\phi/2)$ and sits $H/2$ pixels above the centre. So $f = (H/2)/\tan(\phi/2)$, the same horizontally (square pixels).
+\item The image spans continuous coordinates $[0, W]\times[0, H]$ with the optical axis at the centre $(W/2, H/2)$. Pixel $(u, v)$ covers $[u, u+1]\times[v, v+1]$, so its centre is at $(u+\frac12, v+\frac12)$, and its offset from the axis is $u + \frac12 - \frac W2 = u - \frac{W-1}{2}$; likewise for $v$.
+\item Pinhole projection $u - c_x = f\,x/z$, $v - c_y = f\,y/z$ with $y$ pointing down the image; solve for $x, y$.
+\item The OpenCV axes are $\bm x_{\text{cam}}$, $-\bm y_{\text{cam}}$ (down) and $-\bm z_{\text{cam}}$ (forward), which gives the columns of $R_{wc}$. Its determinant is $\det[\bm x, -\bm y, -\bm z] = \det[\bm x, \bm y, \bm z] = 1$, so it is a proper rotation. \hfill $\square$
+\end{enumerate}
+\textbf{Workspace crop.} The detector gets the region the authors' workspace mask covers: the footprint of everything more than 1\,cm above the calibrated table height, grown by 2\,cm, including the table points inside it. The collision check gets the whole $60\times60$\,cm pick area. No object segmentation from the simulator is used.
+\meta{I.1 [mj] (a rendered box: its top face back-projects to the right height and its edges to the right place); [num] ($R_{wc}$ is a rotation)}{scene.camera\_K, scene.backproject, scene.R\_world\_cv}
+
+\subsection{Grasps in the world, and the approach test}
+\textbf{Claim.} A detector grasp with rotation $R_c$ (columns: approach, closing direction, finger height) and centre $\bm t_c$ in the camera frame is the world grasp $R_w = R_{wc}R_c$, $\bm t_w = \bm o + R_{wc}\bm t_c$. Its approach is within $\alpha$ of straight down (decisions D3) exactly when $(R_w)_{31} \le -\cos\alpha$.
+
+\textbf{Derivation.} The same frame change as I.1 applied to every column of $R_c$ and to $\bm t_c$. The approach is the first column $\bm a = R_w\bm e_1$; its angle to $-\bm e_z$ is at most $\alpha$ iff $\bm a\cdot(-\bm e_z) \ge \cos\alpha$, i.e.\ $-(R_w)_{31}\ge\cos\alpha$. \hfill $\square$
+\meta{I.2 [num] (round trip world $\to$ camera $\to$ world; the test against the angle computed directly)}{scene.grasps\_to\_world, scene.approach\_ok\_world}
+
+\subsection{Is a resting pose stable at every shift?}
+\textbf{Claim.} An object at rest on the table stays put only if the ground projection of its CoM lies inside the support polygon, the convex hull of its contact points. With the polygon's edges written as $\bm a_k\cdot\bm q + b_k \le 0$ ($|\bm a_k| = 1$, outward normals), the projection $\bm q$ lies a distance $\delta = -\max_k(\bm a_k\cdot\bm q + b_k)$ inside it (negative if outside).
+
+\textbf{Derivation.} For a convex polygon, $\bm q$ is inside iff it is on the inner side of every edge line. $\bm a_k\cdot\bm q + b_k$ is the signed distance to edge line $k$ (negative inside), so the smallest distance to an edge line is $-\max_k(\cdot)$. Inside a convex polygon, the nearest boundary point lies on the nearest edge line, so this is the distance to the boundary. \hfill $\square$
+
+A resting pose is used only if $\delta\ge5$\,mm at every shift (the hidden core moves the CoM), and the object then has to stay within a few millimetres when simulated for 1\,s at the shifts 0 and 8\,cm.
+\meta{I.3 [num] (a square support: inside, on the edge, outside)}{scene.rest\_poses}
 
 % =====================================================================
 \appendix
