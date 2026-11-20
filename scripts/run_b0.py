@@ -10,8 +10,9 @@ noise).
     python gpu/detect_grasps.py --detector gsnet --scenes results/b0/scenes --out results/b0/cache
     python scripts/run_b0.py run --out results/b0
 
-Outcome (D2): success = the object ends in the bin, was not dropped before release, and never turned more than
-10 deg in the hand (tilt, rotation about the approach axis excluded) between the lift and the release.
+Outcome (D2, D22): success = the object ends in the bin, was not dropped, and never turned more than 10 deg in the
+hand (tilt, rotation about the approach axis excluded) from the lift to the end of the carry. Lowering it into the
+bin is placement, so contact there does not count against the grasp.
 """
 import argparse
 import csv
@@ -41,10 +42,11 @@ D3_DEG = 30.0
 PRE = 0.10               # pre-grasp stand-off along the approach [m]
 LIFT_H, LIFT_T, HOLD_T = 0.10, 1.2, 2.0
 T_SETTLE, T_REACH, T_DESCEND, T_CONVERGE, T_CLOSE, T_SQUEEZE = 1.0, 2.5, 1.5, 1.0, 0.5, 0.5
-T_CARRY, T_LOWER, T_RELEASE, T_AFTER = 2.5, 1.2, 0.5, 1.0
+T_UP, T_ACROSS, T_CARRY_JOINT, T_LOWER, T_RELEASE, T_RETRACT, T_AFTER = 2.0, 3.5, 4.0, 1.5, 0.5, 0.8, 0.5
+RETRACT_H = 0.10         # hand moves up this far after opening, before the bin check [m]
 BIN_ABOVE = 0.40         # TCP height above the bin centre for the carry [m]
 BIN_YAWS = (0, 45, -45, 90, -90, 135, -135, 180)   # wrist turns tried for the carry [deg]
-RELEASE_CLEAR = 0.04     # lowest object point this far above the bin floor at release [m]
+RELEASE_CLEAR = 0.02     # lowest object point this far above the bin floor at release [m] (D22)
 
 
 def feasible(r, mass=MASS_KG):
@@ -174,6 +176,41 @@ def line_qs(arm, dk, p0, p1, R, q0, n=11):
         q, _, _, _ = arm.ik(dk, p0 + s * (p1 - p0), R, q)
         qs.append(q)
     return np.array(qs)
+
+
+def path_qs(arm, dk, ps, Rs, q0):
+    """IK along sampled TCP poses, warm-started point to point. Returns (qs, all converged)."""
+    qs, q, ok_all = [], q0, True
+    for p, R in zip(ps, Rs):
+        q, ok, _, _ = arm.ik(dk, p, R, q)
+        ok_all &= ok
+        qs.append(q)
+    return np.array(qs), ok_all
+
+
+def carry_path(arm, dk, p_l, R_g, R_b, q_l, n=21):
+    """Gentle carry (D22): straight up to the travel height, then straight across to above the bin, the wrist
+    turning smoothly from R_g to R_b on the way. Returns [(qs, T), ...] or None if IK fails somewhere."""
+    from scipy.spatial.transform import Rotation as Rot, Slerp
+    p_up = np.array([p_l[0], p_l[1], S.TABLE_Z + BIN_ABOVE])
+    p_b = S.BIN_CENTER + [0, 0, BIN_ABOVE]
+    s_ = np.linspace(0, 1, n)
+    up, ok1 = path_qs(arm, dk, [p_l + u * (p_up - p_l) for u in s_], [R_g] * n, q_l)
+    slerp = Slerp([0, 1], Rot.from_matrix([R_g, R_b]))
+    across, ok2 = path_qs(arm, dk, [p_up + u * (p_b - p_up) for u in s_], slerp(s_).as_matrix(), up[-1])
+    return [(up, T_UP), (across, T_ACROSS)] if ok1 and ok2 else None
+
+
+def lowest_point(m, d, geoms):
+    """Exact lowest point of the object's collision geometry (its mesh vertices in the world)."""
+    z = np.inf
+    for g in geoms:
+        if m.geom_type[g] != 7 or not (m.geom_contype[g] or m.geom_conaffinity[g]):    # 7 = mesh
+            continue
+        mid = m.geom_dataid[g]
+        v = m.mesh_vert[m.mesh_vertadr[mid]:m.mesh_vertadr[mid] + m.mesh_vertnum[mid]]
+        z = min(z, float((v @ d.geom_xmat[g].reshape(3, 3).T + d.geom_xpos[g])[:, 2].min()))
+    return z
 
 
 def along(qs, T, t):
@@ -323,28 +360,53 @@ def run_one(args):
             if not track():
                 log["pad_lost_t"] += m.opt.timestep
         rec["tilt_after_hold"] = log["tilt_max"]
-        # 5. carry to above the bin
-        t0 = d.time
-        while d.time - t0 < T_CARRY:
-            q, qd, qdd = RB.min_jerk(gr["q_l"], gr["q_b"], T_CARRY, d.time - t0)
-            step(q, qd, grip, qdd)
-            if not track():
-                log["pad_lost_t"] += m.opt.timestep
-        # 6. lower until the object's lowest point is RELEASE_CLEAR above the bin floor, release
-        low = min(d.geom_xpos[g][2] - m.geom_rbound[g] for g in obj_geoms if m.geom_contype[g] or m.geom_conaffinity[g])
-        drop = max(0.0, low - (S.TABLE_Z + RELEASE_CLEAR))
+        # 5. carry to above the bin, gently (D22): up, then across; joint-space fallback if IK fails on the path
+        segs = carry_path(arm, dk, gr["p_g"] + [0, 0, LIFT_H], gr["R_g"], gr["R_b"], gr["q_l"])
+        rec["carry"] = "cartesian" if segs else "joint"
+        for qs_, T_ in (segs or []):
+            t0 = d.time
+            while d.time - t0 < T_:
+                q, qd, qdd = along(qs_, T_, d.time - t0)
+                step(q, qd, grip, qdd)
+                if not track():
+                    log["pad_lost_t"] += m.opt.timestep
+        if not segs:
+            t0 = d.time
+            while d.time - t0 < T_CARRY_JOINT:
+                q, qd, qdd = RB.min_jerk(gr["q_l"], gr["q_b"], T_CARRY_JOINT, d.time - t0)
+                step(q, qd, grip, qdd)
+                if not track():
+                    log["pad_lost_t"] += m.opt.timestep
+        q_top = segs[-1][0][-1] if segs else gr["q_b"]
+        # 6. lower until the object's lowest point (exact, from its mesh vertices) is RELEASE_CLEAR above the floor
+        drop = max(0.0, lowest_point(m, d, obj_geoms) - (S.TABLE_Z + RELEASE_CLEAR))
         p_b = S.BIN_CENTER + [0, 0, BIN_ABOVE]
-        lower = line_qs(arm, dk, p_b, p_b - [0, 0, min(drop, BIN_ABOVE - 0.12)], gr["R_b"], gr["q_b"])
+        lower = line_qs(arm, dk, p_b, p_b - [0, 0, min(drop, BIN_ABOVE - 0.05)], gr["R_b"], q_top)
         t0 = d.time
-        while d.time - t0 < T_LOWER:
+        while d.time - t0 < T_LOWER:        # placing: contact with the bin is not a grasp failure, so no tracking (D22)
             q, qd, qdd = along(lower, T_LOWER, d.time - t0)
             step(q, qd, grip, qdd)
-            if not track():
-                log["pad_lost_t"] += m.opt.timestep
         t0 = d.time
-        while d.time - t0 < T_RELEASE + T_AFTER:
+        while d.time - t0 < T_RELEASE:
             step(lower[-1], np.zeros(7), RB.MAX_OPEN / 2)
-        in_bin = S.in_bin(d.xipos[obj])
+        # retract straight up with the hand open, as a robot does after letting go, then let the object settle (D22)
+        p_low = p_b - [0, 0, min(drop, BIN_ABOVE - 0.05)]
+        retract = line_qs(arm, dk, p_low, p_low + [0, 0, RETRACT_H], gr["R_b"], lower[-1])
+        t0 = d.time
+        while d.time - t0 < T_RETRACT:
+            q, qd, qdd = along(retract, T_RETRACT, d.time - t0)
+            step(q, qd, RB.MAX_OPEN / 2, qdd)
+        t0 = d.time
+        while d.time - t0 < T_AFTER:
+            step(retract[-1], np.zeros(7), RB.MAX_OPEN / 2)
+        rec["final_com"] = [round(float(v), 4) for v in d.xipos[obj]]
+        n_ = d.ncon
+        g1_, g2_ = d.contact.geom1[:n_], d.contact.geom2[:n_]
+        tch = is_obj[g1_] ^ is_obj[g2_]
+        oth = np.where(is_obj[g1_], g2_, g1_)[tch]
+        rec["touching_hand_at_end"] = bool(np.isin(oth, list(arm.pad_geoms | arm.finger_mesh | {arm.palm})).any())
+        rec["touching_bin_at_end"] = bool(any(m.geom(int(o)).name.startswith("bin") for o in oth))
+        in_bin = S.in_bin(d.xipos[obj], free_of_hand=not rec["touching_hand_at_end"])
         tilt_fail = log["tilt_max"] > MAX_TILT
         success = in_bin and not log["dropped"] and not tilt_fail
         if success:
@@ -355,6 +417,8 @@ def run_one(args):
             outcome = "turned in hand"
         elif log["dropped"]:
             outcome = "dropped"
+        elif np.linalg.norm(d.xipos[obj][:2] - S.BIN_CENTER[:2]) > 1.0:
+            outcome = "ejected at release (simulation)"   # a rare contact blow-up, flagged rather than hidden
         else:
             outcome = "missed the bin"
         rec.update(outcome=outcome, success=success, in_bin=in_bin, **log)

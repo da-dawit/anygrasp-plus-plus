@@ -186,10 +186,14 @@ def bin_geoms():
                      for k, (p, s) in enumerate(walls))
 
 
-def in_bin(p):
-    """Is a point inside the bin's interior footprint and below its rim?"""
+BIN_REST_Z = 0.25        # an object resting in the bin has its CoM below this (rim 0.10 m; a 29 cm figure standing: 0.16)
+
+
+def in_bin(p, free_of_hand=True):
+    """Did the object end up in the bin (D22)? Its CoM is inside the interior footprint and low enough to be resting
+    there (standing, lying, or leaning on a wall), and the hand has let go."""
     return bool(abs(p[0] - BIN_CENTER[0]) < BIN_INNER / 2 and abs(p[1] - BIN_CENTER[1]) < BIN_INNER / 2
-                and p[2] < TABLE_Z + BIN_WALL_H)
+                and p[2] < TABLE_Z + BIN_REST_Z and free_of_hand)
 
 
 def scene_xml(object_snippets, timestep=0.002, impratio=10, contact=CONTACT, cam_pos=CAM_POS, cam_target=PICK,

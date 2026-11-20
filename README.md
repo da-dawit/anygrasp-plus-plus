@@ -18,11 +18,13 @@ Everything runs in MuJoCo with a simulated Franka Panda.
 
 **Step 2, scene and objects (done).** The scene has a Panda arm, a table, a bin and an overhead depth camera that mimics a RealSense D435, noise and shadows included. There are 10 test objects from the Google Scanned Objects and YCB sets, each with a hidden dense core that shifts its centre of mass by 0–8 cm without changing how it looks. I picked them from all 1108 scans with fixed rules: the core has to be physically possible, the object has to rest stably, and GSNet has to find grasps on it.
 
-**Step 3, baseline (done for the midpoint).** B0 takes GSNet's best grasp that the arm can reach and executes it: grasp, lift, hold, carry, drop in the bin. With 0.45 kg objects it succeeds in 26% of 270 trials; with 1 kg objects, 12% of 300. Almost every failure is the object twisting out of the fingers. GSNet's grasps land about 5 cm from the true centre of mass, and on real-shaped objects the fingertips only touch a small patch.
+**Step 3, baseline (done for the midpoint).** B0 takes GSNet's best grasp that the arm can reach and executes it: grasp, lift, hold, carry, drop in the bin. With 0.45 kg objects it succeeds in 36% of 270 trials; with 1 kg objects, 16% of 300. Almost every failure is the object twisting out of the fingers. GSNet's grasps land about 5 cm from the true centre of mass, and on real-shaped objects the fingertips only touch a small patch.
 
-The useful part is that the friction model predicts these outcomes grasp by grasp. Each grasp's slip distance can be computed from the patch it actually touches. Objects held when the lever arm was below that distance and fell when it was above: the fitted 50% point is at 1.08 times the predicted slip distance (95% CI 0.62–1.69), and the prediction matches the outcome in 80% of trials. That is the model M2 will use to rank grasps.
+The useful part is that the friction model predicts these outcomes grasp by grasp. Each grasp's slip distance can be computed from the patch it actually touches. Objects held when the lever arm was below that distance and fell when it was above: the fitted 50% point is at 1.08 times the predicted slip distance (95% CI 0.62–1.69), and the prediction matches the outcome in 80% of trials.
 
-**Steps 4–5 (next).** M1–M3, the "B0 + blind retry" control, stress tests and the final evaluation.
+**Step 4, re-ranking (started).** To see how much a better choice of grasp could help, I executed each scene's top 10 reachable grasps. Picking the best of them would succeed 64% of the time, against B0's 36%. My first M2, scored from physics alone, doesn't beat B0, because predicting the contact patch from a noisy depth image is hard. A small calibrated model over the same physical quantities reaches 43% on objects it wasn't trained on. Grasp-depth refinement and the M3 test lift come next.
+
+**Step 5 (next).** M1 and M3, the "B0 + blind retry" control, stress tests, and the final comparison on fresh scenes.
 
 The reasoning behind every change from the proposal is in `docs/decisions.md`. Every equation the code uses is derived in `docs/derivations.pdf`, and `scripts/check_derivations.py` tests each one (89 checks).
 

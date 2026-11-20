@@ -43,12 +43,13 @@ def features(args):
     p_g, R_g = RB.grasp_to_tcp(R, tw[0], float(r["depth"]))
     w_open = min(float(r["width"]) + 0.01, RB.MAX_OPEN)
     pts = M2.object_points(sc["points"] @ sc["R_wc"].T + sc["p_wc"])
-    ds, _ = M2.predicted_dstar(pts, p_g, R_g, w_open, mass, accel=a_peak())
+    ds, _ = M2.predicted_dstar(pts, p_g, R_g, w_open, mass, accel=a_peak())   # _: cloud point counts
     c0, V, half = M2.com_prior(pts)
     axis = R_g[:, 1]
-    ph = float(P.p_hold_uniform(p_g, axis, c0, V, half, mass, ds=ds)) if ds > 0 else 0.0
+    ph = float(np.ravel(P.p_hold_uniform(p_g, axis, c0, V, half, mass, ds=ds))[0]) if ds > 0 else 0.0
     d_vis = float(abs(P.lever_arm(p_g, axis, c0)[0]))
-    return dict(r, score=float(ca["grasps"][i, 0]), dstar_pred=ds, p_hold=ph, d_vis=d_vis)
+    return dict(r, score=float(ca["grasps"][i, 0]), dstar_pred=ds, p_hold=ph, d_vis=d_vis,
+                n_pts_cloud_left=_.get("n_left"), n_pts_cloud_right=_.get("n_right"))
 
 
 def main():

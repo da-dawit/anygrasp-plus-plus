@@ -25,6 +25,8 @@ This is where I record every change from the proposal (`proposal/proposal_final.
 | D19 | First B0 run: the fingertip was too stiff | 2026-11-20 |
 | D20 | The fingertip as a thin rubber layer | 2026-11-20 |
 | D21 | Object mass re-chosen with the measured slip distance: 0.45 kg | 2026-11-20 |
+| D22 | A gentler carry, an exact release, and what counts as in the bin | 2026-11-20 |
+| D23 | First M2 results on the development set | 2026-11-20 |
 
 ---
 
@@ -250,3 +252,45 @@ D15's rule is that the typical slip distance should sit in the middle of the 0�
 The power drill can't come along. At 0.45 kg an 8 cm shift needs 82% of its mass in the core, and D16's rule (at least 100 g of shell, set before any run) caps that at 78%. I kept the rule, so the drill appears only in the 1 kg condition, and the 0.45 kg run has 9 objects × 5 shifts × 6 seeds = 270 trials, on the same poses and noise as the 1 kg run so the two can be compared trial by trial. `run_b0.py` skips any object whose core is infeasible at the run's mass.
 
 The finding for the midpoint: the proposal assumed B0 would grasp near the visible centroid with a flat-face d\* of about 4.7 cm, and set "B0 ≥ 80% with no shift" as a sanity check. Instead, B0's grasps sit a median 5 cm from the true CoM even with no shift, because a shape-only detector spreads its grasps along the object, and their contact patches are small. So the hidden shift changes B0's success much less than expected; some grasps end up closer to the CoM and others farther. What does predict each grasp's outcome is the physics model applied to that grasp's own contacts, which is exactly what M2 needs for re-ranking.
+
+## D22. A gentler carry, an exact release, and what counts as in the bin
+
+To see how much better any re-ranking could do, I executed each scene's first 10 reachable grasps (2,700 trials at 0.45 kg, `run_b0.py candidates`). Picking the best of those 10 would succeed in 57% of scenes against B0's 26%, so there's plenty of room. But a ranking with perfect knowledge of both the true CoM and each grasp's true contact patch only reached 36%. Something outside the grasp physics was costing about 20 points, so I looked at what happened to the 622 grasps that held through the lift and the hold. Only 53% of them counted as successes.
+
+Three things in the protocol were responsible, and none of them is about the grasp:
+
+1. The carry was a 2.5 s joint-space move with hand accelerations above 1 m/s², harsher than anything the slip physics was checked for, and objects were lowered into the bin while the tilt rule was still running. A 40 cm shark held fine all the way across, then touched the bin wall on the way down and turned in the hand. That's placing, not holding.
+2. The release height came from bounding spheres, which overstate how far an object hangs below the hand, so some objects were dropped from too high.
+3. "In the bin" required the CoM below the 10 cm rim. An action figure released upright ended up standing in the middle of the bin with its CoM at 0.16 m and was scored as a miss. 7 of the 8 "missed the bin" cases I traced were this figure.
+
+The new protocol, for every method:
+
+- The carry rises straight up to 0.40 m in 2 s (about 0.36 m/s², the same as the lift), then moves straight across to above the bin in 3.5 s (about 0.25 m/s²), turning the wrist smoothly on the way. If IK fails anywhere along that path it falls back to a 4 s joint-space move, and the trial records which one it used.
+- The object is lowered until its true lowest point, taken from its collision vertices, is 2 cm above the bin floor, then released.
+- Turning in the hand and dropping are counted from the lift to the end of the carry, while the grasp alone holds the object. Contact while it's being set down doesn't count against the grasp.
+- After opening, the hand moves 10 cm straight up and waits 0.5 s before the bin check, the way a robot backs away after letting go. Without this, 118 of 125 "missed the bin" cases in the candidates run were objects resting in the bin but still touching an open fingertip.
+- An object is in the bin if its CoM is inside the bin's footprint, it rests below 0.25 m (standing, lying or leaning on a wall), and the hand has let go.
+- An object that ends more than 1 m from the bin was thrown by a contact blow-up at release (7 of 2,700 candidate trials). It counts as a failure, but it's labelled separately so it isn't mistaken for a grasp failure.
+
+B0 (both masses) and the candidates run are re-run under this protocol on the same scenes and detections. The first B0 results stay on file as `trials.csv` in `results/b0` and `results/b0_m045`.
+
+With the new protocol B0 succeeds in 96 of 270 trials at 0.45 kg (36%; 17/54 with no shift) and 48 of 300 at 1 kg (16%). Almost all remaining failures are objects turning in the hand (144 at 0.45 kg). Only 2 objects miss the bin, and one trial at 1 kg plus 7 of the 2,700 candidate trials were thrown at release. The per-grasp physics check is unchanged, since the lift and hold didn't change.
+
+## D23. First M2 results on the development set
+
+The candidates run (`results/b0_m045_v2/candidates.csv`) gives the true outcome of each scene's first 10 reachable grasps, so any ranking that picks one of them can be scored exactly. These scenes (seeds 0–5) are my development set. The final comparison will use fresh seeds.
+
+| policy | success |
+|---|---|
+| B0, the detector's first reachable grasp | 96/270 (36%) |
+| M2 v1: detector score × P(hold), cloud-predicted d\*, uniform CoM prior | 34% |
+| grasp closest to the visible centre (the proposal's B2) | 40% |
+| M2 v1 with the true CoM | 42% |
+| calibrated M2, leave-one-object-out | 116/270 (43%) |
+| best of the 10 (ceiling for re-ranking) | 174/270 (64%) |
+
+The physics version of M2 doesn't beat B0, because its d\* predicted from the cloud is too noisy (rank correlation about 0.3 with the measured value; the cloud's 1 mm noise is bigger than the pad's sink). A small logistic model over the same observable quantities does better: predicted d\*, lever arm about the visible centre, their ratio, P(hold), detector score, approach angle, width and depth. It's evaluated with each object left out of its own training, and it separates successes from failures with an AUC of 0.80.
+
+The lever arm about the visible centre carries most of the signal (AUC 0.79 alone). After it come the grasp depth (deeper is better, which fits the pads only touching on their lower rows in D20), the detector score and P(hold). This is `scripts/m2_learn.py`.
+
+The ceiling of 64% means there's a lot left. The next steps are refining the grasp depth so the pads cover more of the object, and M3, where the test lift measures the CoM and catches grasps that start to slip.
