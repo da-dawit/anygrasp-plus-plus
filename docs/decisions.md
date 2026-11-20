@@ -22,6 +22,7 @@ Every change from the proposal (`proposal/proposal_final.tex`), with the reason 
 | D16 | Hidden weight is a dense core in the object's heavy end; 10 objects from 1108 scans (GSO + YCB) | 2026-11-20 |
 | D17 | Simulated depth follows a RealSense D435 (stereo noise, shadows, edge dropout, 1 mm units) | 2026-11-20 |
 | D18 | B0 execution protocol: scene, grasp choice, controller, motion, outcome labels | 2026-11-20 |
+| D19 | First B0 run: the fingertip model is too stiff for real (imperfect) contact; recalibrate it | 2026-11-20 |
 
 ---
 
@@ -319,3 +320,28 @@ Both closing directions of each grasp are tried. Whole-arm collision checks are 
 - missed the bin.
 
 The lever arm d is measured at the end of the squeeze from the pad midpoint, the closing axis and the true CoM (A.2).
+
+## D19. First B0 run: the fingertip model is too stiff for real contact
+
+**Run** (pad as in D4, 1.0 kg, protocol D18; `results/b0/trials_pad_v1.csv`, `summary_pad_v1.json`):
+
+- 37/300 successes (12%). By shift 0/2/4/6/8 cm: 9, 9, 3, 7, 9 of 60. No-shift success is 15%; the proposal's sanity criterion is at least 80%.
+- Outcomes: 223 turned in hand, 8 dropped, 9 missed the bin, 15 never gripped (blocked or closed on air), 8 had no reachable grasp.
+- The pipeline itself works end to end and is deterministic: a rerun reproduces every outcome.
+
+**Diagnosis.**
+
+- Each executed grasp's own slip distance was computed from the pad contacts it actually made at the end of the squeeze: positions and normal forces, patch model A.12 with the load shared equally (A.5).
+- **The physics model predicts the outcomes.** Holding through lift and hold agrees with |d| < d\*(this grasp) in 79% of trials. When it predicts a hold (|d|/d\* < 0.9) the object holds in 86%; at |d|/d\* > 2 only 19% hold. The misses lean conservative: objects that re-stick, as in step 1.
+- **But d\* is tiny.** The weaker pad touches at a median of 2 points on every object, including the flat-sided Duplo brick and bookend, and even for straight-down grasps. The median d\* is 1.0 cm, against 4.3 cm for a full-face contact. B0's grasps sit a median 5.1 cm from the CoM even with no shift, so almost everything twists, whatever the shift.
+- **Cause: the pad is too stiff to conform.** Step 1 calibrated it to sink 0.11 mm on a perfectly aligned flat face, so any misalignment above atan(0.11/17 mm) ≈ 0.4° loads only one edge row.
+- A real 2 mm rubber layer (E ≈ 3 MPa) under 70 N on one row compresses roughly 10 times more and spreads the load over several rows. On a curved surface it forms a patch about 8 mm wide (thin-layer and Hertz estimates). Step 1 already noted that misaligned grasps slip early; the full pipeline shows it is the dominant effect.
+
+**Decision.** Recalibrate the pad as a thin rubber layer, so that each contact point acts like the layer above it (stiffness E·A_cell/h) and concentrated loads sink proportionally:
+
+1. Check the flat-face sink (0.16 mm at 70 N, as before).
+2. Check how many rows engage at a few degrees of misalignment.
+3. Check the patch width on a cylinder against the thin-layer prediction.
+4. Re-run the step-1 calibration checks.
+
+Then re-run B0. If the median per-grasp d\* still sits far from the middle of the shift range, the mass is re-chosen by D15's rule (d\* in the middle of the 0–8 cm range), using the measured per-grasp d\* instead of the flat-face value.

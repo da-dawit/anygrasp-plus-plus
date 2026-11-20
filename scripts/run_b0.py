@@ -173,6 +173,41 @@ def along(qs, T, t):
     return qs[k] + (x - k) * (qs[k + 1] - qs[k]), dq * fd, dq * fdd
 
 
+def contact_dstar(m, d, arm, is_obj, is_pad, ob, mass=O.MASS):
+    """This grasp's own slip distance from the pad contacts it actually made (A.12, A.5): per pad, the contact
+    points in the pad plane (x across, z up, from the TCP) weighted by their normal forces; the two pads share the
+    weight equally, so d* = (T_left(W/2) + T_right(W/2)) / W."""
+    import mujoco
+    from anygrasp_pp.rig_trial import a_peak
+    tcp, R = arm.tcp_pose(d)
+    pts = {"left": [], "right": []}
+    f6 = np.zeros(6)
+    for i in range(d.ncon):
+        c = d.contact[i]
+        if not (is_obj[c.geom1] ^ is_obj[c.geom2]):
+            continue
+        other = c.geom2 if is_obj[c.geom1] else c.geom1
+        if not is_pad[other]:
+            continue
+        mujoco.mj_contactForce(m, d, i, f6)
+        r = c.pos - tcp
+        side = "left" if m.geom(other).name.startswith("left") else "right"
+        pts[side].append((r @ R[:, 0], -(r @ R[:, 2]), f6[0]))
+    out = dict(n_pts_left=len(pts["left"]), n_pts_right=len(pts["right"]))
+    if not pts["left"] or not pts["right"]:
+        return dict(out, dstar_lift_cm=0.0, dstar_static_cm=0.0)
+    for name, acc in (("dstar_lift_cm", a_peak()), ("dstar_static_cm", 0.0)):
+        W = mass * (P.G + acc)
+        T = 0.0
+        for side in ("left", "right"):
+            a_ = np.array(pts[side])
+            fn = a_[:, 2].sum()
+            out[f"fn_{side}"] = float(fn)
+            T += P.patch_torque_capacity(a_[:, :2], W / 2, P.MU, fn, weights=np.maximum(a_[:, 2], 1e-9))
+        out[name] = float(T / W * 100)
+    return out
+
+
 # ----------------------------------------------------------------------------- execution
 def run_one(args):
     tr, out = args
@@ -262,6 +297,7 @@ def run_one(args):
         g1, g2 = d.contact.geom1[:n], d.contact.geom2[:n]
         touch = is_obj[g1] ^ is_obj[g2]
         rec["pads_on_object"] = int(is_pad[np.where(is_obj[g1], g2, g1)[touch]].sum())
+        rec.update(contact_dstar(m, d, arm, is_obj, is_pad, ob))
         tcp, Rt = arm.tcp_pose(d)
         rec["lever_arm_cm"] = float(abs(P.lever_arm(tcp, Rt[:, 1], d.xipos[obj])[0]) * 100)
         rec["com_shift_seen_cm"] = float(tr["shift"] * 100)
