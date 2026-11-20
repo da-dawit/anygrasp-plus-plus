@@ -1,0 +1,112 @@
+[
+ {
+  "tag": "Thomas_Friends_Wooden_Railway_Deluxe_Track_Accessory_Pack__s8__k2",
+  "left": "b0",
+  "right": "agpp",
+  "video": "Thomas_Friends_Wooden_Railway_Deluxe_Track_Accessory_Pack__s8__k2.mp4",
+  "left_outcome": "turned in hand",
+  "right_outcome": "success",
+  "left_tries": 1,
+  "right_tries": 2,
+  "right_logged": "success"
+ },
+ {
+  "tag": "Elephant__s6__k2",
+  "left": "b0",
+  "right": "agpp",
+  "video": "Elephant__s6__k2.mp4",
+  "left_outcome": "turned in hand",
+  "right_outcome": "success",
+  "left_tries": 1,
+  "right_tries": 2,
+  "right_logged": "success"
+ },
+ {
+  "tag": "Shark__s6__k5",
+  "left": "b0",
+  "right": "agpp",
+  "video": "Shark__s6__k5.mp4",
+  "left_outcome": "turned in hand",
+  "right_outcome": "success",
+  "left_tries": 1,
+  "right_tries": 2,
+  "right_logged": "success"
+ },
+ {
+  "tag": "Victor_Reversible_Bookend__s6__k3",
+  "left": "b0",
+  "right": "agpp",
+  "video": "Victor_Reversible_Bookend__s6__k3.mp4",
+  "left_outcome": "turned in hand",
+  "right_outcome": "success",
+  "left_tries": 1,
+  "right_tries": 2,
+  "right_logged": "success"
+ },
+ {
+  "tag": "048_hammer__s6__k0",
+  "left": "b0",
+  "right": "agpp",
+  "video": "048_hammer__s6__k0.mp4",
+  "left_outcome": "turned in hand",
+  "right_outcome": "success",
+  "left_tries": 1,
+  "right_tries": 2,
+  "right_logged": "success"
+ },
+ {
+  "tag": "072-a_toy_airplane__s6__k4",
+  "left": "b0",
+  "right": "agpp",
+  "video": "072-a_toy_airplane__s6__k4.mp4",
+  "left_outcome": "turned in hand",
+  "right_outcome": "success",
+  "left_tries": 1,
+  "right_tries": 2,
+  "right_logged": "success"
+ },
+ {
+  "tag": "MINI_EXCAVATOR__s4__k0",
+  "left": "b0",
+  "right": "agpp",
+  "video": "MINI_EXCAVATOR__s4__k0.mp4",
+  "left_outcome": "no grip (blocked on approach)",
+  "right_outcome": "success",
+  "left_tries": 1,
+  "right_tries": 2,
+  "right_logged": "success"
+ },
+ {
+  "tag": "073-g_lego_duplo__s2__k0",
+  "left": "b0",
+  "right": "agpp",
+  "video": "073-g_lego_duplo__s2__k0.mp4",
+  "left_outcome": "no grip (blocked on approach)",
+  "right_outcome": "success",
+  "left_tries": 1,
+  "right_tries": 2,
+  "right_logged": "success"
+ },
+ {
+  "tag": "SpiderMan_Titan_Hero_12Inch_Action_Figure_oo1qph4wwiW__s6__k5",
+  "left": "b0",
+  "right": "agpp",
+  "video": "SpiderMan_Titan_Hero_12Inch_Action_Figure_oo1qph4wwiW__s6__k5.mp4",
+  "left_outcome": "no grip (blocked on approach)",
+  "right_outcome": "success",
+  "left_tries": 1,
+  "right_tries": 1,
+  "right_logged": "success"
+ },
+ {
+  "tag": "Elephant__s6__k3",
+  "left": "b0",
+  "right": "agpp",
+  "video": "Elephant__s6__k3.mp4",
+  "left_outcome": "turned in hand",
+  "right_outcome": "dropped",
+  "left_tries": 1,
+  "right_tries": 2,
+  "right_logged": "dropped"
+ }
+]

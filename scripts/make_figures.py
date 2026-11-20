@@ -1,10 +1,9 @@
-"""Figures for the midpoint memo and the project page, all from committed results:
+"""Figures for the midpoint memo and the project page, from committed results.
 
-    fig_policies.png   success of each grasp-choice policy on the development scenes, 95% CI (object bootstrap)
-    fig_shift.png      success vs the hidden CoM shift: B0 at 0.45 and 1 kg, calibrated M2, best of the executed grasps
-    fig_physics.png    per-grasp check of the friction model: held through lift and hold vs |d| / d*_grasp
-    fig_failure.png    the first failure mode, before and after: contact points and per-grasp d* with the step-1 pad
-                       and with the rubber-layer pad (D19, D20)
+    fig_methods.png   success of each method, development scenes (held-out objects) and fresh scenes, 95% CI
+    fig_shift.png     success vs the hidden CoM shift
+    fig_physics.png   held through lift and hold vs |d| / d* of each grasp's own contact patch
+    fig_failure.png   contact points and per-grasp d* with the step-1 pad and the rubber-layer pad (D19, D20)
 
     python scripts/make_figures.py --out results/midpoint
 """
@@ -23,82 +22,92 @@ import matplotlib  # noqa: E402
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-INK, MUTED, GRID = "#1f2430", "#5c6475", "#e6e8ee"
-B0C, M2C, RETRY, CEIL, HEAVY = "#8a93a6", "#1b8a7a", "#d08a2c", "#c9d3e6", "#4f5d7a"
-plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10.5, "axes.edgecolor": MUTED,
-                     "axes.labelcolor": INK, "xtick.color": MUTED, "ytick.color": MUTED, "axes.titleweight": "bold",
-                     "axes.titlesize": 11.5, "axes.spines.top": False, "axes.spines.right": False,
-                     "savefig.dpi": 200, "savefig.bbox": "tight"})
+plt.rcParams.update({"font.size": 10, "savefig.dpi": 200, "savefig.bbox": "tight", "axes.spines.top": False,
+                     "axes.spines.right": False})
+C = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 
 
 def rows(path):
     return list(csv.DictReader(open(path)))
 
 
-def policies(pol, out, name="fig_policies.png", note="0.45 kg, development seeds 0-5."):
-    names = list(pol["groups"]["all shifts"])
-    short = {"B0 (detector's first reachable grasp)": "B0: detector's first grasp",
-             "B0 + blind retry (upper bound)": "B0 + one blind retry*",
-             "Closest to the visible centre": "Closest to the visible centre",
-             "M2 v1 (physics only)": "M2 v1, physics only",
-             "M2 calibrated (held-out objects)": "M2 calibrated (held-out objects)",
-             "M2 calibrated (frozen, fresh scenes)": "M2 calibrated (frozen)",
-             "M2 calibrated + blind retry (upper bound)": "M2 calibrated + one retry*",
-             "Best of the executed grasps (ceiling)": "Best of the executed grasps"}
-    col = {n: B0C for n in names}
-    col.update({names[1]: RETRY, names[5]: RETRY, names[4]: M2C, names[3]: "#7fb8ae", names[2]: "#a7b0c2",
-                names[6]: CEIL})
-    fig, axs = plt.subplots(1, 2, figsize=(10.5, 3.8), sharey=True)
-    for ax, g in zip(axs, ("all shifts", "6-8 cm shift")):
-        G = pol["groups"][g]
-        y = np.arange(len(names))[::-1]
-        r = np.array([G[n]["rate"] for n in names]) * 100
-        lo = np.array([G[n]["ci"][0] for n in names]) * 100
-        hi = np.array([G[n]["ci"][1] for n in names]) * 100
-        ax.barh(y, r, color=[col[n] for n in names], height=0.66,
-                hatch=["//" if "retry" in n else "" for n in names], edgecolor="white", linewidth=0.5)
-        ax.errorbar(r, y, xerr=[r - lo, hi - r], fmt="none", ecolor=INK, elinewidth=1, capsize=2.5, alpha=0.7)
-        for yi, ri, n in zip(y, r, names):
-            ax.text(ri + 1.2, yi + 0.18, f"{ri:.0f}%", va="center", ha="left", fontsize=9.5, color=INK,
-                    fontweight="bold" if n == names[4] else "normal")
-        ax.axvline(G[names[0]]["rate"] * 100, color=MUTED, lw=0.8, ls=":")
-        ax.set_xlim(0, 100)
-        ax.set_title(f"{g} ({G[names[0]]['n']} scenes)", loc="left")
-        ax.set_xlabel("pick-and-place success [%]")
-        ax.grid(axis="x", color=GRID, lw=0.8)
-        ax.set_axisbelow(True)
-    axs[0].set_yticks(np.arange(len(names))[::-1], [short[n] for n in names])
-    fig.text(0.01, -0.07, "* upper bound: any failure triggers the retry, and the second grasp is scored on the "
-             "undisturbed scene.\nBars: 95% CI, bootstrap over objects. " + note,
-             fontsize=8.5, color=MUTED)
-    fig.savefig(os.path.join(out, name))
+def boot_rate(ok, objs, n=4000, seed=0):
+    ok, objs = np.asarray(ok, float), np.asarray(objs)
+    names = sorted(set(objs))
+    idx = {o: np.flatnonzero(objs == o) for o in names}
+    rng = np.random.default_rng(seed)
+    b = [ok[np.concatenate([idx[o] for o in rng.choice(names, len(names))])].mean() for _ in range(n)]
+    return ok.mean(), np.percentile(b, [2.5, 97.5])
+
+
+def m3_rows(path):
+    if not os.path.exists(path):
+        return None
+    return [json.loads(line) for line in open(path)]
+
+
+def methods(out, m3_dirs):
+    """Bars: B0, B0 + blind retry, M2, AnyGrasp++ (M2 + M3), best of the executed grasps; dev and fresh scenes."""
+    groups = []
+    for label, pol_file, m3 in (("development scenes\n(objects held out)", "policies.json", m3_dirs.get("dev")),
+                                ("fresh scenes", "policies_fresh.json", m3_dirs.get("fresh"))):
+        pol = json.load(open(os.path.join(out, pol_file)))["groups"]["all shifts"]
+        k = list(pol)
+        bars = [("B0", pol[k[0]]["rate"], pol[k[0]]["ci"])]
+        if m3 and m3.get("retry"):
+            r = m3["retry"]
+            bars.append(("B0 + blind retry", *boot_rate([x.get("success", False) for x in r], [x["name"] for x in r])))
+        bars.append(("M2", pol[k[4]]["rate"], pol[k[4]]["ci"]))
+        if m3 and m3.get("agpp"):
+            r = m3["agpp"]
+            bars.append(("AnyGrasp++ (M2 + M3)", *boot_rate([x.get("success", False) for x in r], [x["name"] for x in r])))
+        bars.append(("best of the executed grasps", pol[k[6]]["rate"], pol[k[6]]["ci"]))
+        groups.append((label, bars))
+    col = {"B0": C[7], "B0 + blind retry": C[1], "M2": C[0], "AnyGrasp++ (M2 + M3)": C[2],
+           "best of the executed grasps": "0.8"}
+    fig, ax = plt.subplots(figsize=(7.2, 3.4))
+    seen = set()
+    for gi, (label, bars) in enumerate(groups):
+        w = 0.8 / len(bars)
+        for bi, (n, r, ci) in enumerate(bars):
+            x = gi + (bi - (len(bars) - 1) / 2) * w
+            ax.bar(x, 100 * r, w * 0.92, color=col[n], label=None if n in seen else n)
+            seen.add(n)
+            ax.errorbar(x, 100 * r, yerr=[[100 * (r - ci[0])], [100 * (ci[1] - r)]], color="k", lw=0.8, capsize=2)
+            ax.text(x, 100 * ci[1] + 1.5, f"{100 * r:.0f}", ha="center", fontsize=8)
+    ax.set_xticks(range(len(groups)), [g[0] for g in groups])
+    ax.set_ylabel("success (%)")
+    ax.set_ylim(0, 100)
+    ax.legend(frameon=False, fontsize=8, ncol=3, loc="upper center", bbox_to_anchor=(0.5, -0.2))
+    fig.savefig(os.path.join(out, "fig_methods.png"))
     plt.close(fig)
 
 
-def shift_curve(explorer, out):
+def shift_curve(explorer, out, m3_dev):
     shifts = [0, 2, 4, 6, 8]
 
     def rate(path):
         R = rows(path)
         return [100 * np.mean([r["success"] == "True" for r in R if round(float(r["shift"]) * 100) == s]) for s in shifts]
-    b0_045, b0_1 = rate("results/b0_m045_v2/trials.csv"), rate("results/b0_v2/trials.csv")
+    fig, ax = plt.subplots(figsize=(5.2, 3.4))
+    ax.plot(shifts, rate("results/b0_m045_v2/trials.csv"), "o-", color=C[7], label="B0")
+    ax.plot(shifts, rate("results/b0_v2/trials.csv"), "s--", color=C[7], alpha=0.6, label="B0, 1 kg objects")
     m2 = [100 * np.mean([bool(e["cands"]) and next(f for f in e["cands"] if f["cand"] == e["m2"])["ok"]
                          for e in explorer if e["shift"] == s]) for s in shifts]
+    ax.plot(shifts, m2, "o-", color=C[0], label="M2")
+    if m3_dev:
+        for pol, c, lab in (("retry", C[1], "B0 + blind retry"), ("agpp", C[2], "AnyGrasp++")):
+            if m3_dev.get(pol):
+                r = m3_dev[pol]
+                ax.plot(shifts, [100 * np.mean([x.get("success", False) for x in r if round(float(x["shift"]) * 100) == s])
+                                 for s in shifts], "o-", color=c, label=lab)
     ceil = [100 * np.mean([any(f["ok"] for f in e["cands"]) for e in explorer if e["shift"] == s]) for s in shifts]
-    fig, ax = plt.subplots(figsize=(6.2, 3.8))
-    ax.fill_between(shifts, b0_045, ceil, color=CEIL, alpha=0.45, lw=0, label="room for re-ranking")
-    ax.plot(shifts, ceil, "-", color="#9aa7c4", lw=1.5, marker="o", ms=4, label="best of the executed grasps")
-    ax.plot(shifts, m2, "-", color=M2C, lw=2.4, marker="o", ms=5, label="M2 calibrated (held-out objects)")
-    ax.plot(shifts, b0_045, "-", color=B0C, lw=2.4, marker="s", ms=5, label="B0, 0.45 kg (9 objects)")
-    ax.plot(shifts, b0_1, "--", color=HEAVY, lw=1.6, marker="s", ms=4, label="B0, 1 kg (10 objects)")
-    ax.set_xticks(shifts, [f"{s} cm" for s in shifts])
-    ax.set_xlabel("hidden centre-of-mass shift")
-    ax.set_ylabel("success [%]")
+    ax.plot(shifts, ceil, ":", color="0.5", label="best of the executed grasps")
+    ax.set_xticks(shifts)
+    ax.set_xlabel("hidden CoM shift (cm)")
+    ax.set_ylabel("success (%)")
     ax.set_ylim(0, 100)
-    ax.grid(axis="y", color=GRID)
-    ax.set_axisbelow(True)
-    ax.legend(frameon=False, fontsize=8.8, loc="upper right", ncol=1)
-    ax.set_title("Success vs the hidden shift (54 scenes per point)", loc="left")
+    ax.legend(frameon=False, fontsize=8)
     fig.savefig(os.path.join(out, "fig_shift.png"))
     plt.close(fig)
 
@@ -108,47 +117,35 @@ def per_grasp(path):
            and r.get("dstar_lift_cm") not in ("", None) and float(r["dstar_lift_cm"]) > 0]
     ratio = np.array([float(r["lever_arm_cm"]) / float(r["dstar_lift_cm"]) for r in has])
     held = np.array([float(float(r["tilt_after_hold"]) <= 10.0) for r in has])
-    pts = np.array([min(int(r["n_pts_left"]), int(r["n_pts_right"])) for r in has])
-    ds = np.array([float(r["dstar_lift_cm"]) for r in has])
-    return ratio, held, pts, ds
+    return ratio, held
 
 
-def physics(out, summary):
-    ratio, held, _, _ = per_grasp("results/b0_m045_v2/trials.csv")
+def physics(out):
+    ratio, held = per_grasp("results/b0_m045_v2/trials.csv")
     r50, k = fit_d50(ratio, held)
-    edges = [0, 0.5, 0.9, 1.1, 1.5, 2, 3, 8, np.inf]
-    fig, ax = plt.subplots(figsize=(6.2, 3.8))
+    fig, ax = plt.subplots(figsize=(5.2, 3.4))
     rng = np.random.default_rng(1)
-    x = np.minimum(ratio, 7.9)
-    ax.scatter(x, held + rng.uniform(-0.035, 0.035, len(held)), s=11, alpha=0.45,
-               c=np.where(held == 1, M2C, "#c4553f"), lw=0)
+    ax.scatter(np.minimum(ratio, 7.9), held + rng.uniform(-0.03, 0.03, len(held)), s=8, alpha=0.4, color=C[0], lw=0)
+    edges = [0, 0.5, 0.9, 1.1, 1.5, 2, 3, 8, np.inf]
     for lo, hi in zip(edges[:-1], edges[1:]):
         sel = (ratio >= lo) & (ratio < hi)
         if sel.sum() >= 5:
-            p, n = held[sel].mean(), sel.sum()
-            se = np.sqrt(p * (1 - p) / n + 1e-9)
-            xc = np.median(np.minimum(ratio[sel], 7.9))
-            ax.errorbar(xc, p, yerr=1.96 * se, fmt="o", color=INK, ms=6, mfc="white", mew=1.6, capsize=2.5)
-    xr = np.linspace(0, 8, 400)
-    ax.plot(xr, 1 / (1 + np.exp(k * (xr - r50))), color=INK, lw=1.6, label=f"logistic fit: 50% at {r50:.2f}")
-    ax.axvline(1, color=M2C, lw=2, alpha=0.35, label="friction model: holds while |d| < d*")
-    lo, hi = summary["per_grasp"]["ratio50_ci95"]
-    ax.axvspan(lo, hi, color=M2C, alpha=0.08, lw=0, label=f"95% CI of the 50% point ({lo:.2f}-{hi:.2f})")
+            p = held[sel].mean()
+            ax.errorbar(np.median(np.minimum(ratio[sel], 7.9)), p, yerr=1.96 * np.sqrt(p * (1 - p) / sel.sum()),
+                        fmt="o", color="k", mfc="white", capsize=2)
+    x = np.linspace(0, 8, 400)
+    ax.plot(x, 1 / (1 + np.exp(k * (x - r50))), "k-", lw=1, label=f"logistic fit (50% at {r50:.2f})")
+    ax.axvline(1, color=C[3], lw=1, ls="--", label="model: holds if |d| < d*")
     ax.set_xlim(0, 8)
-    ax.set_ylim(-0.08, 1.08)
-    ax.set_xlabel("lever arm / this grasp's own slip distance   |d| / d*")
-    ax.set_ylabel("held through lift and 2 s hold")
-    ax.legend(frameon=False, fontsize=8.6, loc="center right")
-    ax.set_title(f"The friction model predicts each grasp ({len(held)} B0 grasps)", loc="left")
-    ax.text(7.9, 0.22, f"agrees with the outcome\nin {100 * summary['per_grasp']['agreement']:.0f}% of grasps",
-            ha="right", va="center", fontsize=8.6, color=MUTED)
+    ax.set_xlabel("|d| / d* (lever arm over this grasp's slip distance)")
+    ax.set_ylabel("held through lift and hold")
+    ax.legend(frameon=False, fontsize=8, loc="center right")
     fig.savefig(os.path.join(out, "fig_physics.png"))
     plt.close(fig)
 
 
 def all_contacts(path):
-    """D19's definition: every trial with a measured lever arm, including grasps where one pad never touched
-    (d* = 0, so the model predicts a failure)."""
+    """D19's counting: every trial with a measured lever arm, including grasps where one pad never touched."""
     g = [r for r in rows(path) if r.get("lever_arm_cm") not in ("", None)]
     ds = np.array([float(r["dstar_lift_cm"] or 0) for r in g])
     ratio = np.array([float(r["lever_arm_cm"]) for r in g]) / np.maximum(ds, 1e-9)
@@ -160,34 +157,14 @@ def all_contacts(path):
 def failure(out):
     before = all_contacts("results/b0/trials_pad_v1.csv")
     after = all_contacts("results/b0/trials.csv")
-    fig, axs = plt.subplots(1, 3, figsize=(11, 3.3))
-    b = np.arange(0, 17)
-    for data, c, lab in ((before, "#c4553f", "step-1 pad (too stiff)"), (after, M2C, "rubber-layer pad")):
-        axs[0].hist(np.minimum(data[2], 16), bins=b - 0.5, color=c, alpha=0.55, label=lab)
-        axs[1].hist(np.minimum(data[3], 8), bins=np.linspace(0, 8, 33), color=c, alpha=0.55, label=lab)
+    fig, axs = plt.subplots(1, 2, figsize=(7.2, 2.6))
+    for data, c, lab in ((before, C[3], "step-1 pad"), (after, C[0], "rubber-layer pad")):
+        axs[0].hist(np.minimum(data[2], 16), bins=np.arange(18) - 0.5, color=c, alpha=0.5, label=lab)
+        axs[1].hist(np.minimum(data[3], 8), bins=np.linspace(0, 8, 33), color=c, alpha=0.5, label=lab)
     axs[0].set_xlabel("contact points on the weaker pad (of 16)")
     axs[0].set_ylabel("grasps")
-    axs[0].set_title("Contact patch", loc="left")
-    axs[1].set_xlabel("this grasp's slip distance d* [cm]")
-    axs[1].set_title("Slip distance", loc="left")
-    for ax, k in ((axs[0], 2), (axs[1], 3)):
-        for data, c in ((before, "#c4553f"), (after, M2C)):
-            ax.axvline(np.median(data[k]), color=c, lw=1.8, ls="--")
-        ax.legend(frameon=False, fontsize=8.5)
-    agr = [100 * np.mean((d[0] < 1) == (d[1] == 1)) for d in (before, after)]
-    axs[2].bar([0, 1], agr, color=["#c4553f", M2C], alpha=0.8, width=0.6)
-    for i, v in enumerate(agr):
-        axs[2].text(i, v + 1.5, f"{v:.0f}%", ha="center", fontweight="bold", color=INK)
-    axs[2].set_xticks([0, 1], ["step-1 pad", "rubber layer"])
-    axs[2].set_ylim(0, 100)
-    axs[2].set_ylabel("|d| < d* agrees with outcome [%]")
-    axs[2].set_title("Physics agreement", loc="left")
-    for ax in axs:
-        ax.grid(axis="y", color=GRID)
-        ax.set_axisbelow(True)
-    fig.text(0.01, -0.05, f"B0 at 1 kg, every trial with a measured lever arm ({len(before[0])} and {len(after[0])}). Medians: {np.median(before[2]):.0f} -> "
-             f"{np.median(after[2]):.0f} contact points, d* {np.median(before[3]):.1f} -> {np.median(after[3]):.1f} cm.",
-             fontsize=8.5, color=MUTED)
+    axs[1].set_xlabel("slip distance d* of the grasp (cm)")
+    axs[0].legend(frameon=False, fontsize=8)
     fig.savefig(os.path.join(out, "fig_failure.png"))
     plt.close(fig)
 
@@ -195,18 +172,19 @@ def failure(out):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="results/midpoint")
+    ap.add_argument("--m3-dev", default="results/m3_dev")
+    ap.add_argument("--m3-fresh", default="results/m3_fresh")
     a = ap.parse_args()
-    pol = json.load(open(os.path.join(a.out, "policies.json")))
     explorer = json.load(open(os.path.join(a.out, "explorer.json")))
-    summary = json.load(open("results/b0_m045_v2/summary.json"))
-    policies(pol, a.out)
-    fresh = os.path.join(a.out, "policies_fresh.json")
-    if os.path.exists(fresh):
-        policies(json.load(open(fresh)), a.out, "fig_policies_fresh.png",
-                 "0.45 kg, fresh seeds 6-11; M2 frozen after fitting on the development seeds.")
-    shift_curve(explorer, a.out)
-    physics(a.out, summary)
+    m3 = {k: {p: m3_rows(os.path.join(d, f"{p}_parts.jsonl")) for p in ("agpp", "retry")}
+          for k, d in (("dev", a.m3_dev), ("fresh", a.m3_fresh))}
+    methods(a.out, m3)
+    shift_curve(explorer, a.out, m3["dev"])
+    physics(a.out)
     failure(a.out)
+    for f in ("fig_policies.png", "fig_policies_fresh.png"):     # replaced by fig_methods.png
+        if os.path.exists(os.path.join(a.out, f)):
+            os.remove(os.path.join(a.out, f))
     print("figures written to", a.out)
 
 

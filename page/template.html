@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="AnyGrasp++: a simulated Franka Panda that checks where the weight is before trusting a grasp.">
+  <meta name="description" content="AnyGrasp++: a simulated Franka Panda that feels the weight of an object before trusting its grasp.">
   <title>AnyGrasp++</title>
-  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans:400,600,700,800|Castoro:400,400i" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans:400,700|Castoro" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="./static/css/index.css">
@@ -14,31 +14,18 @@
 
 <section class="hero">
   <div class="hero-body">
-    <div class="container is-max-desktop">
-      <div class="columns is-centered">
-        <div class="column has-text-centered">
-          <h1 class="title is-1 publication-title">AnyGrasp++</h1>
-          <h2 class="subtitle is-3 publication-subtitle">Checking the weight before trusting the grasp</h2>
-          <div class="is-size-5 publication-authors">
-            <span class="author-block">Dawit Chun</span>
-          </div>
-          <div class="is-size-6 publication-authors">
-            <span class="author-block">DA434 Embodied Intelligence &middot; Taejae University</span>
-          </div>
-          <span class="publication-venue">Midpoint prototype &middot; November 2026</span>
-          <div class="publication-links" style="margin-top: 1rem;">
-            <span class="link-block"><a href="#rollouts" class="button is-normal is-rounded is-dark">
-              <span class="icon"><i class="fas fa-film"></i></span><span>Rollouts</span></a></span>
-            <span class="link-block"><a href="#results" class="button is-normal is-rounded is-dark">
-              <span class="icon"><i class="fas fa-chart-column"></i></span><span>Results</span></a></span>
-            <span class="link-block"><a href="../README.md" class="button is-normal is-rounded is-dark">
-              <span class="icon"><i class="fas fa-code"></i></span><span>Code</span></a></span>
-            <span class="link-block"><a href="../docs/derivations.pdf" class="button is-normal is-rounded is-dark">
-              <span class="icon"><i class="fas fa-square-root-variable"></i></span><span>Derivations</span></a></span>
-            <span class="link-block"><a href="../docs/decisions.md" class="button is-normal is-rounded is-dark">
-              <span class="icon"><i class="fas fa-list-check"></i></span><span>Decision log</span></a></span>
-          </div>
-        </div>
+    <div class="container is-max-desktop has-text-centered">
+      <h1 class="title is-1 publication-title">AnyGrasp++</h1>
+      <h2 class="subtitle is-4 publication-subtitle">Checking the weight before trusting the grasp</h2>
+      <div class="is-size-5 publication-authors">Dawit Chun</div>
+      <div class="is-size-6 publication-authors">DA434 Embodied Intelligence, Taejae University &middot; midpoint, November 2026</div>
+      <div class="publication-links" style="margin-top: 1rem;">
+        <span class="link-block"><a href="../README.md" class="button is-normal is-rounded is-dark">
+          <span class="icon"><i class="fas fa-code"></i></span><span>Code</span></a></span>
+        <span class="link-block"><a href="../docs/decisions.md" class="button is-normal is-rounded is-dark">
+          <span class="icon"><i class="fas fa-list"></i></span><span>Decision log</span></a></span>
+        <span class="link-block"><a href="../docs/derivations.pdf" class="button is-normal is-rounded is-dark">
+          <span class="icon"><i class="fas fa-file-pdf"></i></span><span>Derivations</span></a></span>
       </div>
     </div>
   </div>
@@ -47,144 +34,94 @@
 <section class="hero teaser">
   <div class="container is-max-desktop">
     <div class="hero-body">
-      <video autoplay muted loop playsinline poster="../results/midpoint/videos/Shark__s8__k1.jpg">
-        <source src="../results/midpoint/videos/Shark__s8__k1.mp4" type="video/mp4">
-      </video>
-      <p class="caption has-text-centered">
-        A hidden core moves this shark's centre of mass 8&nbsp;cm without changing how it looks.
-        GSNet's top grasp (left) twists 91&deg; in the hand. My re-ranker picks a different one of GSNet's own
-        grasps (right), and the shark arrives in the bin.
-        <span class="legend-dot" style="background:#f04848"></span>true centre of mass, which the camera can't see;
-        <span class="legend-dot" style="background:#3f7fef"></span>the centre the point cloud suggests.
-      </p>
+      <video id="teaser" autoplay muted loop playsinline></video>
+      <p class="caption" id="teaser-caption"></p>
     </div>
   </div>
 </section>
 
 <section class="section">
   <div class="container is-max-desktop">
-    <div class="columns is-centered has-text-centered">
-      <div class="column is-four-fifths">
-        <h2 class="title is-3">The idea</h2>
-        <div class="content has-text-justified">
-          <p>
-            Grasp detectors like AnyGrasp and GSNet choose grasps from shape. That works until the weight sits
-            somewhere the shape doesn't show: a hammer head, a drill battery, a half-full bottle. Then a grasp that
-            looks fine twists out of the fingers as soon as the object leaves the table. At my internship I watched
-            exactly this happen with AnyGrasp on a real arm.
-          </p>
-          <p>
-            AnyGrasp++ leaves the detector alone and adds three steps around it. <b>M1</b> keeps grasps the whole
-            arm can reach without hitting anything. <b>M2</b> re-ranks them with a friction model of the fingertips
-            and the current guess of where the centre of mass is. <b>M3</b> makes a short test lift, reads the mass
-            and centre of mass from the Panda's joint torques, and regrasps if the grasp is going to slip.
-            Everything runs in MuJoCo with a torque-controlled Franka Panda, a simulated RealSense D435 and ten
-            scanned household objects that each hide a dense core.
-          </p>
-        </div>
-      </div>
+    <h2 class="title is-3">Summary</h2>
+    <div class="content">
+      <p>Grasp detectors such as AnyGrasp and GSNet pick grasps from the shape of an object. If the weight is
+        somewhere the shape doesn't show, for example in the head of a hammer, the grasp can look fine and still
+        twist out of the gripper when the object is lifted. I saw this happen with AnyGrasp on a real arm during my
+        internship.</p>
+      <p>AnyGrasp++ keeps the detector as it is and adds three steps. M1 checks that the whole arm can reach a grasp
+        without collisions. M2 re-ranks the detector's grasps with a friction model of the fingertips. M3 lifts the
+        object 2&nbsp;cm, measures its weight and centre of mass at the wrist, and if the grasp is slipping, puts the
+        object down and grasps it again somewhere better. Everything runs in MuJoCo with a Franka Panda, a simulated
+        RealSense D435 camera and ten scanned objects that each hide a heavy core.</p>
     </div>
   </div>
 </section>
 
-<section class="section" style="background: var(--soft);">
+<section class="section">
   <div class="container is-max-desktop">
-    <h2 class="title is-3">What's built so far</h2>
-    <div class="content">
-      <p>The baseline pipeline runs end to end, from a depth image to an object in the bin. The M2 prototype plugs
-        in between the detector and the arm, and re-ranks the detector's grasps before the arm moves.</p>
-    </div>
-    <div class="pipeline">
-      <div class="stage built"><span class="tag built">built</span><h4>Scene &amp; objects</h4>
-        <p>10 scanned objects (Google Scanned Objects, YCB). A tungsten-dense core moves the centre of mass 0&ndash;8&nbsp;cm.</p></div>
-      <div class="stage built"><span class="tag built">built</span><h4>Depth camera</h4>
-        <p>RealSense D435 model: stereo noise, shadows, edge dropout, 1&nbsp;mm steps.</p></div>
-      <div class="stage built"><span class="tag built">built</span><h4>GSNet</h4>
-        <p>Frozen detector on a rented GPU, run once per scene and cached. Reruns are bit-identical.</p></div>
-      <div class="stage built"><span class="tag built">built</span><h4>B0 choice</h4>
-        <p>The detector's best grasp that IK can reach: pre-grasp, grasp, lift and above the bin.</p></div>
-      <div class="stage proto"><span class="tag proto">prototype</span><h4>M2 re-rank</h4>
-        <p>Friction-model features from the point cloud, calibrated. Picks among the detector's grasps.</p></div>
-      <div class="stage built"><span class="tag built">built</span><h4>Execution</h4>
-        <p>Torque-controlled Panda (libfranka gains), 70&nbsp;N gripper, rubber pads, lift, 2&nbsp;s hold, carry, place.</p></div>
-      <div class="stage next"><span class="tag next">next</span><h4>M1 collision</h4>
-        <p>Whole-arm collision check for every candidate.</p></div>
-      <div class="stage next"><span class="tag next">next</span><h4>M3 test lift</h4>
-        <p>Centre of mass from joint torques, slip check, regrasp.</p></div>
-    </div>
+    <h2 class="title is-3">Status at the midpoint</h2>
+    <table class="table is-fullwidth is-narrow status">
+      <thead><tr><th>Part</th><th>Status</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Scene and objects</td><td>done</td><td>10 objects from Google Scanned Objects and YCB, each with a dense core that moves the CoM by 0&ndash;8&nbsp;cm</td></tr>
+        <tr><td>Camera</td><td>done</td><td>D435 depth model with stereo noise, shadows and 1&nbsp;mm steps</td></tr>
+        <tr><td>Detector</td><td>done</td><td>GSNet on a rented GPU, cached per scene; also runs as a service for regrasps</td></tr>
+        <tr><td>Robot and B0</td><td>done</td><td>torque-controlled Panda, 70&nbsp;N gripper with rubber pads, lift, carry, place</td></tr>
+        <tr><td>M2 re-ranking</td><td>working</td><td>calibrated on the development scenes, tested on fresh ones</td></tr>
+        <tr><td>M3 test lift</td><td>working (ideal wrist sensor)</td><td>joint-torque version next</td></tr>
+        <tr><td>M1 collision check</td><td>not started</td><td></td></tr>
+      </tbody>
+    </table>
   </div>
 </section>
 
 <section class="section" id="rollouts">
   <div class="container is-max-desktop">
-    <h2 class="title is-3">Rollouts: the detector's choice vs. the re-ranked one</h2>
-    <div class="content">
-      <p>Each video is one scene, played twice: on the left the grasp B0 executes, on the right the grasp the M2
-        prototype picks from the same GSNet list. These are the logged trials, re-run while a camera records,
-        and each re-run reproduced its logged outcome. Pick an object below. The last two show scenes where
-        the re-ranker fails too.</p>
-    </div>
-    <div class="rollout-player">
-      <video id="rollout" controls muted playsinline preload="metadata"></video>
-      <div class="verdicts" id="verdicts"></div>
-      <p class="caption has-text-centered" id="rollout-caption"></p>
-    </div>
+    <h2 class="title is-3">Videos</h2>
+    <div class="content"><p>Each video shows one scene twice, B0 on the left and AnyGrasp++ on the right, played at
+      normal speed. The trials are the same ones counted in the results.</p></div>
+    <video id="rollout" controls muted playsinline preload="metadata"></video>
+    <p class="caption" id="rollout-caption"></p>
     <div class="chips" id="chips"></div>
   </div>
 </section>
 
-<section class="section" id="results" style="background: var(--soft);">
+<section class="section" id="results">
   <div class="container is-max-desktop">
-    <h2 class="title is-3">Early results</h2>
-    <div class="content">
-      <p>Development set: 9 objects at 0.45&nbsp;kg &times; 5 hidden shifts &times; 6 seeds = 270 scenes. To find
-        out what a better choice could achieve, I executed every scene's first ten reachable grasps, so any policy
-        that picks one of them can be scored with that grasp's real outcome. Intervals are 95% bootstrap over objects.</p>
-    </div>
-    <div class="stats" id="tiles"></div>
-    <figure class="fig"><img src="../results/midpoint/fig_policies.png" alt="Success of each grasp-choice policy">
-      <figcaption class="caption">The proposal feedback asked for a "B0 + blind retry" control. Even scored
-        generously, one blind retry gains 14 points, so retrying alone explains much of a gain. M2 with the same
-        single retry is 5 points above it. The final comparison runs the real retry, with a set-down and a new
-        detection.</figcaption></figure>
-    <div id="fresh"></div>
-    <figure class="fig" id="fresh-fig" style="display:none"><img src="../results/midpoint/fig_policies_fresh.png" alt="Policies on fresh scenes"></figure>
+    <h2 class="title is-3">Results so far</h2>
+    <div class="content" id="results-text"></div>
+    <figure class="fig"><img src="../results/midpoint/fig_methods.png" alt="Success of each method">
+      <figcaption class="caption">Success rate of each method, with 95% intervals from resampling objects. "Best of the
+        executed grasps" is the success if one always picked the best of the first ten grasps the arm can reach.</figcaption></figure>
     <div class="columns">
       <div class="column"><figure class="fig"><img src="../results/midpoint/fig_shift.png" alt="Success vs hidden shift">
-        <figcaption class="caption">B0 barely reacts to the hidden shift: its grasps already sit about 5&nbsp;cm from
-          the centre of mass with no shift, so moving the weight helps some grasps and hurts others. The shaded gap
-          is what a perfect choice among the detector's own grasps could add.</figcaption></figure></div>
+        <figcaption class="caption">Development scenes, by how far the hidden core moves the CoM. B0 doesn't change much
+          with the shift because its grasps are already about 5&nbsp;cm from the CoM when nothing is shifted.</figcaption></figure></div>
       <div class="column"><figure class="fig"><img src="../results/midpoint/fig_physics.png" alt="Friction model check">
-        <figcaption class="caption">The friction model works grasp by grasp. Each grasp's slip distance
-          d* comes from the contact patch it actually made. Grasps hold when the lever arm is below d* and twist when it's
-          above. The fitted 50% point is 1.08&nbsp;d*; the model says 1.</figcaption></figure></div>
+        <figcaption class="caption">Each B0 grasp, by its lever arm divided by the slip distance d* of the contact patch
+          it actually made. The model says a grasp holds when this is below 1; the fitted 50% point is 1.08.</figcaption></figure></div>
     </div>
   </div>
 </section>
 
 <section class="section">
   <div class="container is-max-desktop">
-    <h2 class="title is-3">Explore every development scene</h2>
-    <div class="content"><p>Rows are hidden shifts, columns are seeds. Each cell is split: the left half is B0's
-      grasp, the right half is M2's pick on the same scene
-      (<span class="legend-dot" style="background:var(--ok)"></span>in the bin,
-      <span class="legend-dot" style="background:var(--fail)"></span>turned in the hand,
-      <span class="legend-dot" style="background:#d99a8c"></span>other failure,
-      <span class="legend-dot" style="background:#c9ced8"></span>no reachable grasp). Click a cell to see every
-      grasp that was executed there.</p></div>
+    <h2 class="title is-3">All development scenes</h2>
+    <div class="content"><p>Rows are shifts and columns are seeds. In each cell the left half is B0 and the right half
+      is M2's first choice (green: in the bin, red: turned in the hand, pink: other failure, grey: no reachable grasp).
+      Clicking a cell lists every grasp that was tried in that scene.</p></div>
     <div class="explorer-controls" id="obj-buttons"></div>
     <div class="grid-wrap"><table class="trials" id="trials"></table></div>
     <div class="detail" id="detail"></div>
   </div>
 </section>
 
-<section class="section" style="background: var(--soft);">
+<section class="section">
   <div class="container is-max-desktop">
-    <h2 class="title is-3">Ten objects, each hiding a weight</h2>
-    <div class="content"><p>I picked these from all 1108 scans with fixed rules: the object rests stably, GSNet
-      finds grasps on it, and a hidden core can move its centre of mass 8&nbsp;cm while staying physically possible
-      (no denser than tungsten, at least 100&nbsp;g of shell). The dots show the centre of mass at the five shifts.
-      From the outside, every shift looks the same.</p></div>
+    <h2 class="title is-3">Objects</h2>
+    <div class="content"><p>The ten objects, chosen from 1108 scans by fixed rules: they rest stably, GSNet finds
+      grasps on them, and a core no denser than tungsten can move the CoM 8&nbsp;cm. The dots mark the CoM at the five
+      shifts. The drill only works at 1&nbsp;kg.</p></div>
     <div class="gallery" id="gallery"></div>
   </div>
 </section>
@@ -193,19 +130,15 @@
   <div class="container is-max-desktop">
     <div class="columns is-vcentered">
       <div class="column is-5">
-        <h2 class="title is-3">What the detector sees</h2>
-        <div class="content"><p>GSNet was trained on real RealSense depth, so the camera here behaves like one:
-          stereo noise that grows with distance squared, shadows where the second imager can't see, dropouts at
-          edges, and 1&nbsp;mm steps. Without this model, GSNet found no usable grasp on the hammer and drill at some
-          angles. Drag across the image to compare the ideal depth with what the detector actually gets.</p></div>
+        <h2 class="title is-3">Depth images</h2>
+        <div class="content"><p>GSNet was trained on real D435 images, so the simulated camera adds the same kinds of
+          errors. Drag the slider to compare the clean depth image with the one the detector gets.</p></div>
       </div>
       <div class="column">
         <div class="compare" id="compare">
           <img src="../results/midpoint/depth_d435.png" alt="Simulated D435 depth">
           <img class="top" src="../results/midpoint/depth_ideal.png" alt="Ideal depth">
           <div class="bar"></div>
-          <span class="lab" style="left:.6rem">ideal depth</span>
-          <span class="lab" style="right:.6rem">simulated D435</span>
           <input type="range" min="0" max="100" value="50" aria-label="compare depth images">
         </div>
       </div>
@@ -213,20 +146,16 @@
   </div>
 </section>
 
-<section class="section" style="background: var(--soft);">
+<section class="section">
   <div class="container is-max-desktop">
-    <h2 class="title is-3">First failure mode: the fingertip was too stiff</h2>
+    <h2 class="title is-3">First problem I had to fix: the fingertip pads</h2>
     <div class="content">
-      <p>The first full B0 run succeeded in only 37 of 300 trials, and success didn't change with the hidden shift.
-        To narrow it down, I computed each grasp's own slip distance from the contacts it actually made. The model
-        still predicted the outcomes, but the pads were touching at a median of just 2 of their 16 contact points,
-        even on the flat Duplo brick. A 0.4&deg; misalignment was enough to lift one edge, because the pad sank only
-        0.11&nbsp;mm under 70&nbsp;N, about 2.2 times stiffer than the real 2&nbsp;mm rubber layer.</p>
-      <p>I re-modelled the fingertip as a thin rubber layer and checked it against layer theory with nothing
-        refitted: points in contact and slip distances match for flat, tilted and curved contacts. The patch
-        grew and the model's agreement with the outcomes went up. The patches are still small, which turned out
-        to be real: GSNet approaches 7&ndash;28&deg; off vertical, and these objects have curved, studded sides.
-        So I re-chose the object mass with the measured slip distance (1&nbsp;kg to 0.45&nbsp;kg).</p>
+      <p>In the first full run B0 succeeded in 37 of 300 trials, and the hidden shift made no difference. When I
+        looked at the contacts, the pads were touching the object at only 2 of their 16 contact points, even on
+        flat bricks. The pad model from step 1 only compressed 0.11&nbsp;mm at 70&nbsp;N, about twice as stiff as a
+        2&nbsp;mm rubber layer, so a tilt of less than half a degree lifted one edge off the object. I remodelled the
+        pad as a thin rubber layer and checked it against the theory for a few contact cases. After that the
+        contacts were larger (histograms below) and the friction model agreed with more of the outcomes.</p>
     </div>
     <figure class="fig"><img src="../results/midpoint/fig_failure.png" alt="Before and after the pad fix"></figure>
   </div>
@@ -234,52 +163,48 @@
 
 <section class="section">
   <div class="container is-max-desktop">
-    <h2 class="title is-3">Reproducibility</h2>
+    <h2 class="title is-3">Running it</h2>
     <div class="content">
       <p id="repro-text"></p>
       <pre class="cmd">conda create -n da434 python=3.12 &amp;&amp; conda activate da434
-pip install -r requirements.txt          # mujoco 4.0.1, numpy, scipy, trimesh, coacd, matplotlib
-bash scripts/setup_assets.sh             # Franka model at a pinned commit, weight checksums
-python scripts/check_derivations.py      # every equation the code uses, 89 checks
+pip install -r requirements.txt
+bash scripts/setup_assets.sh
+python scripts/check_derivations.py
 
-# on a Linux GPU box (detector), see README
+# GPU machine (see README): detector setup, scenes, detections, then the trials
 bash gpu/setup_gpu.sh
 B0_MASS=0.45 MUJOCO_GL=egl python scripts/run_b0.py scenes --out results/b0_m045_v2
 python gpu/detect_grasps.py --detector gsnet --scenes results/b0_m045_v2/scenes --out results/b0_m045_v2/cache
 B0_MASS=0.45 python scripts/run_b0.py run --out results/b0_m045_v2
-python scripts/midpoint_results.py &amp;&amp; python scripts/make_figures.py
-MUJOCO_GL=egl B0_MASS=0.45 python scripts/render_rollouts.py</pre>
+python gpu/detect_service.py --queue /root/detq &amp;
+B0_MASS=0.45 python scripts/run_m3.py --policy agpp --out results/m3_dev</pre>
     </div>
   </div>
 </section>
 
-<section class="section" style="background: var(--soft);">
+<section class="section">
   <div class="container is-max-desktop">
-    <h2 class="title is-3">Plan to December 17</h2>
-    <div class="timeline">
-      <div class="wk done"><b>Nov 16&ndash;22 &middot; midpoint</b>Scene, objects, D435 model, GSNet, B0 on every shift, contact fix, M2 prototype, the retry control as an upper bound.</div>
-      <div class="wk now"><b>Nov 23&ndash;29</b>M3 test lift (ideal sensor, then joint torques), the real B0 + blind retry with set-down and new detection, M1.</div>
-      <div class="wk"><b>Nov 30&ndash;Dec 6</b>All methods on fresh scenes, friction &mu; = 0.8 repeat, torque-noise sweep. Scope check on Dec 6.</div>
-      <div class="wk"><b>Dec 7&ndash;13</b>Stress tests in priority order (trick objects, then EGAD), analysis, videos, slides.</div>
-      <div class="wk"><b>Dec 14&ndash;17</b>Clinic on Dec 15, fixes, final package and talk.</div>
+    <h2 class="title is-3">Plan</h2>
+    <div class="content">
+      <ul>
+        <li><b>Nov 23&ndash;29:</b> test lift with joint torques instead of the ideal wrist sensor, M1, more videos.</li>
+        <li><b>Nov 30&ndash;Dec 6:</b> final comparison on new seeds, friction 0.8, torque noise. Scope check on Dec 6.</li>
+        <li><b>Dec 7&ndash;13:</b> trick objects, then EGAD; analysis and slides.</li>
+        <li><b>Dec 14&ndash;17:</b> clinic, fixes, final presentation.</li>
+      </ul>
+      <p>The cluttered bins move to the stretch goals.</p>
     </div>
-    <p class="caption">Cluttered bins move to Stretch now: they need their own scene generator and many more detections, and the time went into making contact realistic. If Dec 6 is late, EGAD goes next, then the delicate objects.</p>
   </div>
 </section>
 
 <footer class="footer">
   <div class="container">
-    <div class="columns is-centered">
-      <div class="column is-8">
-        <div class="content has-text-centered is-size-7">
-          <p>Franka model from MuJoCo Menagerie (Apache-2.0). Google Scanned Objects (CC BY 4.0) via K. Zakka's
-            MuJoCo conversions (MIT). YCB objects (CC BY 4.0). GSNet and graspnet-baseline weights are for
-            noncommercial research and are not included.</p>
-          <p>This page uses the <a href="https://github.com/nerfies/nerfies.github.io">Nerfies project page
-            template</a>, licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative
-            Commons Attribution-ShareAlike 4.0 International License</a>.</p>
-        </div>
-      </div>
+    <div class="content has-text-centered is-size-7">
+      <p>Franka model from MuJoCo Menagerie (Apache-2.0). Google Scanned Objects (CC BY 4.0) via K. Zakka's MuJoCo
+        conversions (MIT). YCB objects (CC BY 4.0). GSNet and graspnet-baseline weights are not included.</p>
+      <p>This page uses the <a href="https://github.com/nerfies/nerfies.github.io">Nerfies project page template</a>,
+        licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons
+        Attribution-ShareAlike 4.0 International License</a>.</p>
     </div>
   </div>
 </footer>
@@ -289,67 +214,52 @@ MUJOCO_GL=egl B0_MASS=0.45 python scripts/render_rollouts.py</pre>
 (function () {
   const D = JSON.parse(document.getElementById("data").textContent);
   const NAMES = {
-    "Elephant": "Elephant", "MINI_EXCAVATOR": "Toy excavator", "Shark": "Shark",
-    "SpiderMan_Titan_Hero_12Inch_Action_Figure_oo1qph4wwiW": "Action figure",
-    "Thomas_Friends_Wooden_Railway_Deluxe_Track_Accessory_Pack": "Wooden track pack",
-    "Victor_Reversible_Bookend": "Bookend", "035_power_drill": "Power drill", "048_hammer": "Hammer",
-    "072-a_toy_airplane": "Toy airplane", "073-g_lego_duplo": "Duplo build"
+    "Elephant": "elephant", "MINI_EXCAVATOR": "toy excavator", "Shark": "shark",
+    "SpiderMan_Titan_Hero_12Inch_Action_Figure_oo1qph4wwiW": "action figure",
+    "Thomas_Friends_Wooden_Railway_Deluxe_Track_Accessory_Pack": "wooden track pack",
+    "Victor_Reversible_Bookend": "bookend", "035_power_drill": "power drill", "048_hammer": "hammer",
+    "072-a_toy_airplane": "toy airplane", "073-g_lego_duplo": "Duplo build"
   };
   const nice = t => NAMES[t] || t;
-  const pct = x => (100 * x).toFixed(0) + "%";
-  const VID = "../results/midpoint/videos/";
-  const OUT = {"success": "in the bin", "turned in hand": "turned in the hand", "dropped": "dropped",
-    "missed the bin": "missed the bin"};
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const OUT = {"success": "ends up in the bin", "turned in hand": "turns in the hand", "dropped": "is dropped",
+    "missed the bin": "misses the bin", "no grip (closed on air)": "isn't gripped",
+    "no grip (blocked on approach)": "isn't gripped"};
   const outTxt = o => OUT[o] || o;
 
-  // rollouts
-  const vid = document.getElementById("rollout"), chips = document.getElementById("chips");
-  function show(i) {
-    const v = D.videos[i], name = v.tag.split("__s")[0], shift = v.tag.split("__s")[1].split("__")[0];
-    const seed = v.tag.split("__k")[1];
-    vid.poster = VID + v.video.replace(".mp4", ".jpg");
-    vid.src = VID + v.video;
-    vid.play().catch(() => {});
-    document.getElementById("verdicts").innerHTML =
-      `<span class="pill ${v.left_outcome === "success" ? "ok" : "bad"}">B0: ${outTxt(v.left_outcome)}</span>` +
-      `<span class="pill ${v.right_outcome === "success" ? "ok" : "bad"}">M2: ${outTxt(v.right_outcome)}</span>` +
-      `<span class="pill info">${v.left_reproduced && v.right_reproduced ? "matches the logged trial" : "differs from the log"}</span>`;
-    document.getElementById("rollout-caption").textContent =
-      `${nice(name)}, hidden shift ${shift} cm, seed ${seed}. B0 executes GSNet's grasp #${v.left + 1} in reach order; ` +
-      `M2 picks #${v.right + 1}.`;
-    [...chips.children].forEach((c, j) => c.classList.toggle("active", j === i));
-  }
-  D.videos.forEach((v, i) => {
-    const b = document.createElement("button");
-    b.className = "chip" + (v.kind === "both failed" ? " fail" : "");
+  // videos
+  const VID = D.vdir, vid = document.getElementById("rollout"), chips = document.getElementById("chips");
+  function caption(v) {
     const name = v.tag.split("__s")[0], shift = v.tag.split("__s")[1].split("__")[0];
-    b.innerHTML = `<img loading="lazy" src="${VID + v.video.replace(".mp4", ".jpg")}" alt=""><span>${nice(name)} &middot; ${shift} cm${v.kind === "both failed" ? " &middot; both fail" : ""}</span>`;
-    b.onclick = () => show(i);
-    chips.appendChild(b);
-  });
-  show(D.videos.findIndex(v => v.tag.startsWith("048_hammer__s2")) >= 0 ? D.videos.findIndex(v => v.tag.startsWith("048_hammer__s2")) : 0);
-  vid.pause();
-
-  // tiles
-  const G = D.pol.groups["all shifts"], K = Object.keys(G);
-  const tile = (cls, num, lab) => `<div class="stat ${cls}"><div class="num">${num}</div><div class="lab">${lab}</div></div>`;
-  const b0 = G[K[0]], rt = G[K[1]], m2 = G[K[4]], ce = G[K[6]];
-  document.getElementById("tiles").innerHTML =
-    tile("b0", pct(b0.rate), `B0, the detector's first reachable grasp (${b0.success}/${b0.n})`) +
-    tile("m2", pct(m2.rate), `M2 calibrated, on objects it never trained on (+${(100 * m2.diff_vs_b0).toFixed(0)} pts, 95% CI ${(100 * m2.diff_ci[0]).toFixed(0)} to ${(100 * m2.diff_ci[1]).toFixed(0)})`) +
-    tile("retry", pct(rt.rate), "B0 + one blind retry, upper bound") +
-    tile("ceil", pct(ce.rate), "best of the executed grasps: the ceiling for re-ranking");
-  if (D.fresh) {
-    const F = D.fresh.groups["all shifts"], KF = Object.keys(F);
-    const fb0 = F[KF[0]], fm2 = F[KF[4]], fce = F[KF[6]];
-    document.getElementById("fresh").innerHTML = `<div class="content"><p><b>Held-out check on fresh scenes.</b>
-      I froze the calibrated M2 (fitted on every development grasp) and ran it on ${D.fresh.n_scenes} new scenes
-      (seeds 6&ndash;11) that nothing was tuned on: B0 succeeds in ${pct(fb0.rate)} (${fb0.success}/${fb0.n}), M2 in
-      ${pct(fm2.rate)} (${fm2.success}/${fm2.n}; ${fm2.diff_vs_b0 >= 0 ? "+" : ""}${(100 * fm2.diff_vs_b0).toFixed(0)} points,
-      95% CI ${(100 * fm2.diff_ci[0]).toFixed(0)} to ${(100 * fm2.diff_ci[1]).toFixed(0)}), and the best of the executed grasps in ${pct(fce.rate)}.
-      Seeds 12&ndash;17 stay untouched for the final comparison.</p></div>`;
-    document.getElementById("fresh-fig").style.display = "";
+    let s = `${cap(nice(name))}, CoM shifted ${shift} cm. With B0 the object ${outTxt(v.left_outcome)}. `;
+    if (v.right_tries > 1) s += `AnyGrasp++ notices the first grasp slipping during the test lift, puts the object down and grasps it again; it ${outTxt(v.right_outcome)}.`;
+    else s += `AnyGrasp++ picks a different grasp, the test lift shows it holding, and the object ${outTxt(v.right_outcome)}.`;
+    return s;
   }
+  function show(i, el) {
+    const v = D.videos[i];
+    el.src = VID + v.video;
+    el.poster = VID + v.video.replace(".mp4", ".jpg");
+    return caption(v);
+  }
+  if (D.videos.length) {
+    const t = D.videos.findIndex(v => v.right_tries > 1 && v.right_outcome === "success");
+    document.getElementById("teaser-caption").textContent = show(t >= 0 ? t : 0, document.getElementById("teaser"));
+    D.videos.forEach((v, i) => {
+      const b = document.createElement("button");
+      b.className = "chip";
+      b.innerHTML = `<img loading="lazy" src="${VID + v.video.replace(".mp4", ".jpg")}" alt=""><span>${nice(v.tag.split("__s")[0])}, ${v.tag.split("__s")[1].split("__")[0]} cm</span>`;
+      b.onclick = () => { document.getElementById("rollout-caption").textContent = show(i, vid);
+        [...chips.children].forEach((c, j) => c.classList.toggle("active", j === i)); vid.play().catch(() => {}); };
+      chips.appendChild(b);
+    });
+    document.getElementById("rollout-caption").textContent = show(0, vid);
+    chips.children[0].classList.add("active");
+  }
+
+  // results text
+  const T = document.getElementById("results-text");
+  if (D.summary) T.innerHTML = D.summary.map(p => `<p>${p}</p>`).join("");
 
   // explorer
   const cls = o => o == null ? "c-none" : o === "success" ? "c-ok" : o === "turned in hand" ? "c-turn" : "c-other";
@@ -358,15 +268,14 @@ MUJOCO_GL=egl B0_MASS=0.45 python scripts/render_rollouts.py</pre>
   function grid(name) {
     [...btns.children].forEach(b => b.classList.toggle("active", b.dataset.n === name));
     const E = D.explorer.filter(e => e.name === name);
-    const seeds = [...new Set(E.map(e => e.seed))].sort((a, b) => a - b), shifts = [0, 2, 4, 6, 8];
+    const seeds = [...new Set(E.map(e => e.seed))].sort((a, b) => a - b);
     let h = "<tr><th></th>" + seeds.map(s => `<th>seed ${s}</th>`).join("") + "</tr>";
-    for (const s of shifts) {
+    for (const s of [0, 2, 4, 6, 8]) {
       h += `<tr><th>${s} cm</th>`;
       for (const k of seeds) {
         const e = E.find(x => x.shift === s && x.seed === k);
         const cb = e && e.cands.length ? e.cands[0] : null, cm = e && e.cands.length ? e.cands.find(c => c.cand === e.m2) : null;
-        h += `<td><div class="cell" data-tag="${e ? e.tag : ""}" title="B0: ${cb ? outTxt(cb.outcome) : "no grasp"} / M2: ${cm ? outTxt(cm.outcome) : "no grasp"}">` +
-          `<div class="${cls(cb && cb.outcome)}">B0</div><div class="${cls(cm && cm.outcome)}">M2</div></div></td>`;
+        h += `<td><div class="cell" data-tag="${e ? e.tag : ""}"><div class="${cls(cb && cb.outcome)}"></div><div class="${cls(cm && cm.outcome)}"></div></div></td>`;
       }
       h += "</tr>";
     }
@@ -379,14 +288,11 @@ MUJOCO_GL=egl B0_MASS=0.45 python scripts/render_rollouts.py</pre>
     c.classList.add("sel");
     const e = D.explorer.find(x => x.tag === c.dataset.tag);
     if (!e || !e.cands.length) { det.innerHTML = "<p>No reachable grasp in this scene.</p>"; return; }
-    let h = `<p><b>${nice(e.name)}</b>, shift ${e.shift} cm, seed ${e.seed}: ${e.cands.length} reachable grasps executed.</p>` +
-      "<table><tr><th>grasp</th><th>outcome</th><th>lever arm (true CoM)</th><th>slip distance d*</th><th>GSNet score</th><th>M2 P(success)</th></tr>";
-    for (const f of e.cands) {
-      const k = (f.cand === e.b0 ? " pick-b0" : "") + (f.cand === e.m2 ? " pick-m2" : "");
-      h += `<tr class="${k}"><td>#${f.cand + 1}</td><td style="color:${f.ok ? "var(--ok)" : "var(--fail)"}">${outTxt(f.outcome)}</td>` +
-        `<td>${f.lever_arm_cm != null ? (+f.lever_arm_cm).toFixed(1) + " cm" : "-"}</td><td>${f.dstar_lift_cm != null ? (+f.dstar_lift_cm).toFixed(1) + " cm" : "-"}</td>` +
-        `<td>${(+f.score).toFixed(2)}</td><td>${(+f.p_cal).toFixed(2)}</td></tr>`;
-    }
+    let h = `<p>${cap(nice(e.name))}, shift ${e.shift} cm, seed ${e.seed}. B0 takes grasp 1; M2 picks grasp ${e.m2 + 1}.</p>` +
+      "<table class='table is-narrow'><tr><th>grasp</th><th>outcome</th><th>lever arm (cm)</th><th>d* (cm)</th><th>GSNet score</th><th>M2</th></tr>";
+    for (const f of e.cands)
+      h += `<tr><td>${f.cand + 1}</td><td>${f.outcome}</td><td>${f.lever_arm_cm != null ? (+f.lever_arm_cm).toFixed(1) : "-"}</td>` +
+        `<td>${f.dstar_lift_cm != null ? (+f.dstar_lift_cm).toFixed(1) : "-"}</td><td>${(+f.score).toFixed(2)}</td><td>${(+f.p_cal).toFixed(2)}</td></tr>`;
     det.innerHTML = h + "</table>";
   }
   objs.forEach(n => { const b = document.createElement("button"); b.textContent = nice(n); b.dataset.n = n; b.onclick = () => grid(n); btns.appendChild(b); });
@@ -394,20 +300,16 @@ MUJOCO_GL=egl B0_MASS=0.45 python scripts/render_rollouts.py</pre>
 
   // gallery
   document.getElementById("gallery").innerHTML = D.gallery.map(g =>
-    `<figure><img loading="lazy" src="../results/midpoint/gallery/${g.name}.png" alt="${nice(g.name)}">` +
-    `<figcaption>${nice(g.name)} &middot; ${g.source.toUpperCase()}${g.name === "035_power_drill" ? " &middot; 1 kg only" : ""}</figcaption></figure>`).join("");
+    `<figure><img loading="lazy" src="../results/midpoint/gallery/${g.name}.png" alt="${nice(g.name)}"><figcaption>${cap(nice(g.name))}</figcaption></figure>`).join("");
 
-  // depth compare
+  // depth slider
   const cmp = document.getElementById("compare"), top = cmp.querySelector(".top"), bar = cmp.querySelector(".bar");
   cmp.querySelector("input").oninput = ev => { const v = ev.target.value; top.style.clipPath = `inset(0 ${100 - v}% 0 0)`; bar.style.left = v + "%"; };
 
-  // reproducibility
-  const R = D.repro;
-  document.getElementById("repro-text").textContent = R ? `After losing the first GPU machine, I rebuilt everything on a new one ` +
-    `(different GPU and CPU) from the pinned setup script. All ${R.trials} development scenes gave bit-identical GSNet ` +
-    `output, B0 picked the same grasp in ${R.same_grasp} of ${R.trials} trials, and the outcome matched in ` +
-    `${R.same_outcome} of ${R.trials}. The ones that differ are a diverging approach and three contact blow-ups ` +
-    `as the hand opens over the bin, which the trial log flags as simulation artefacts.` : "";
+  const P = D.repro;
+  if (P) document.getElementById("repro-text").textContent = `I rebuilt the whole setup on a second rented machine from the setup script. ` +
+    `GSNet gave identical grasps on all ${P.trials} development scenes, and ${P.same_outcome} of the ${P.trials} B0 trials ended the same way. ` +
+    `The others are three objects knocked away when the hand opens over the bin, which the simulator does now and then, and one approach that went differently.`;
 })();
 </script>
 </body>

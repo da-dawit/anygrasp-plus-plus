@@ -22,11 +22,11 @@ Everything runs in MuJoCo with a simulated Franka Panda.
 
 The useful part is that the friction model predicts these outcomes grasp by grasp. Each grasp's slip distance can be computed from the patch it actually touches. Objects held when the lever arm was below that distance and fell when it was above: the fitted 50% point is at 1.08 times the predicted slip distance (95% CI 0.62–1.69), and the prediction matches the outcome in 80% of trials.
 
-**Step 4, re-ranking (started).** To see how much a better choice of grasp could help, I executed each scene's top 10 reachable grasps. Picking the best of them would succeed 64% of the time, against B0's 36%. My first M2, scored from physics alone, doesn't beat B0, because predicting the contact patch from a noisy depth image is hard. A small calibrated model over the same physical quantities reaches 43% on objects it wasn't trained on. Frozen and run on 270 fresh scenes, it gets 40% against B0's 33% (+7 points, 95% CI 0 to 14), with no loss when nothing is shifted. A blind retry alone would gain about as much, which is why M3 matters.
+**Step 4, re-ranking and the test lift (working).** M2 re-ranks GSNet's grasps with a small model calibrated on the development scenes. Alone it gets 40% on 270 fresh scenes, against B0's 33%. M3 lifts the object 2 cm, holds it for 2 s and reads its weight and moment at the wrist (an ideal sensor for now). If the grasp is slipping, it puts the object down, takes a new picture and regrasps where the measured centre of mass says is best. With at most two grasps, AnyGrasp++ (M2 + M3) gets 50% on the fresh scenes, against 42% for B0 with the same test lift and a blind retry, the control asked for in the proposal feedback.
 
-**Step 5 (next).** M1 and M3, the "B0 + blind retry" control, stress tests, and the final comparison on fresh scenes.
+**Step 5 (next).** The test lift with joint torques instead of an ideal sensor, M1, stress tests, and the final comparison on new seeds.
 
-**Project page.** Open `page/index.html` in a browser for side-by-side rollout videos (B0 against the re-ranked grasp on the same scene), the results, an explorer for every development scene and the object gallery. `python scripts/build_page.py` rebuilds it from `results/midpoint/`.
+**Project page.** Open `page/index.html` in a browser for videos of B0 and AnyGrasp++ on the same scenes, the results, every development scene and the objects. `python scripts/build_page.py` rebuilds it from `results/midpoint/`.
 
 The reasoning behind every change from the proposal is in `docs/decisions.md`. Every equation the code uses is derived in `docs/derivations.pdf`, and `scripts/check_derivations.py` tests each one (89 checks).
 
@@ -72,7 +72,11 @@ python scripts/run_b0.py candidates --out results/b0_m045_v2 --k 10      # each 
 python scripts/eval_rerank.py --run results/b0_m045_v2                    # M2 features
 python scripts/midpoint_results.py --test results/m045_fresh              # every policy, with object-bootstrap CIs
 python scripts/make_figures.py
-MUJOCO_GL=egl python scripts/render_rollouts.py                           # needs ffmpeg
+python gpu/detect_service.py --queue /root/detq &                          # GSNet for the regrasps (GPU machine)
+B0_MASS=0.45 python scripts/run_m3.py --policy agpp --out results/m3_dev     # AnyGrasp++ with the test lift
+B0_MASS=0.45 python scripts/run_m3.py --policy retry --out results/m3_dev    # B0 + blind retry
+python scripts/analyze_m3.py --m3 results/m3_dev --out results/midpoint/m3_dev.json
+MUJOCO_GL=egl python scripts/render_plain.py --pairs results/midpoint/m3_video_picks.json   # needs ffmpeg
 MUJOCO_GL=egl python scripts/render_gallery.py
 python scripts/build_page.py
 ```
