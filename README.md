@@ -22,15 +22,17 @@ Everything runs in MuJoCo with a simulated Franka Panda.
 
 The useful part is that the friction model predicts these outcomes grasp by grasp. Each grasp's slip distance can be computed from the patch it actually touches. Objects held when the lever arm was below that distance and fell when it was above: the fitted 50% point is at 1.08 times the predicted slip distance (95% CI 0.62–1.69), and the prediction matches the outcome in 80% of trials.
 
-**Step 4, re-ranking (started).** To see how much a better choice of grasp could help, I executed each scene's top 10 reachable grasps. Picking the best of them would succeed 64% of the time, against B0's 36%. My first M2, scored from physics alone, doesn't beat B0, because predicting the contact patch from a noisy depth image is hard. A small calibrated model over the same physical quantities reaches 43% on objects it wasn't trained on. Grasp-depth refinement and the M3 test lift come next.
+**Step 4, re-ranking (started).** To see how much a better choice of grasp could help, I executed each scene's top 10 reachable grasps. Picking the best of them would succeed 64% of the time, against B0's 36%. My first M2, scored from physics alone, doesn't beat B0, because predicting the contact patch from a noisy depth image is hard. A small calibrated model over the same physical quantities reaches 43% on objects it wasn't trained on. Frozen and run on 270 fresh scenes, it gets 40% against B0's 33% (+7 points, 95% CI 0 to 14), with no loss when nothing is shifted. A blind retry alone would gain about as much, which is why M3 matters.
 
 **Step 5 (next).** M1 and M3, the "B0 + blind retry" control, stress tests, and the final comparison on fresh scenes.
+
+**Project page.** Open `page/index.html` in a browser for side-by-side rollout videos (B0 against the re-ranked grasp on the same scene), the results, an explorer for every development scene and the object gallery. `python scripts/build_page.py` rebuilds it from `results/midpoint/`.
 
 The reasoning behind every change from the proposal is in `docs/decisions.md`. Every equation the code uses is derived in `docs/derivations.pdf`, and `scripts/check_derivations.py` tests each one (89 checks).
 
 ## Running it
 
-You need conda and, for the detector, a Linux machine with an NVIDIA GPU.
+You need conda, ffmpeg for the videos and, for the detector, a Linux machine with an NVIDIA GPU.
 
 ```bash
 conda create -n da434 python=3.12 && conda activate da434
@@ -62,6 +64,20 @@ python scripts/analyze_b0.py --trials results/b0/trials.csv --out results/b0
 ```
 
 Set `B0_MASS=0.45` for the nominal object mass. Without it the objects weigh 1 kg.
+
+### Midpoint results, figures and videos
+
+```bash
+python scripts/run_b0.py candidates --out results/b0_m045_v2 --k 10      # each scene's first 10 reachable grasps
+python scripts/eval_rerank.py --run results/b0_m045_v2                    # M2 features
+python scripts/midpoint_results.py --test results/m045_fresh              # every policy, with object-bootstrap CIs
+python scripts/make_figures.py
+MUJOCO_GL=egl python scripts/render_rollouts.py                           # needs ffmpeg
+MUJOCO_GL=egl python scripts/render_gallery.py
+python scripts/build_page.py
+```
+
+Fresh scenes for a held-out check use `--seeds`, e.g. `run_b0.py scenes --out results/m045_fresh --seeds 6:12`.
 
 ## What's where
 

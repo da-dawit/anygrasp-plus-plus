@@ -27,6 +27,7 @@ This is where I record every change from the proposal (`proposal/proposal_final.
 | D21 | Object mass re-chosen with the measured slip distance: 0.45 kg | 2026-11-20 |
 | D22 | A gentler carry, an exact release, and what counts as in the bin | 2026-11-20 |
 | D23 | First M2 results on the development set | 2026-11-20 |
+| D24 | Midpoint checks: fresh scenes, the retry bound, a rebuild, rollout videos | 2026-11-21 |
 
 ---
 
@@ -241,7 +242,7 @@ I checked it against the thin-layer solution with nothing refitted, pressing at 
 
 Per-point forces match the theory within 0.05 N of 70 N. Both pads behave as spring beds at their own stiffness; the old one was just about 2.2 times stiffer than the physical layer (60 vs 27 kN/m per point).
 
-On B0 at 1.0 kg (`results/b0/trials.csv`) it barely changed the success rate (34 of 300, against 37), but the contact patch grew: the weaker pad's median contact count went from 2 to 4 and the median per-grasp d\* from 1.0 to 1.9 cm. The physics also predicted each grasp better, agreeing with the outcome in 86% of trials (up from 79%). The held fractions by |d|/d\* were 25/31 below 0.5, 12/15 at 0.5–0.9, 2/9 at 0.9–1.1, 9/28 at 1.1–2 and 12/175 above 2, with a fitted 50% point at 0.87 against the model's 1.
+On B0 at 1.0 kg (`results/b0/trials.csv`) it barely changed the success rate (34 of 300, against 37), but the contact patch grew. Counted the way D19 counts (every trial with a measured lever arm, including grasps where one pad never touched), the weaker pad's median contact count went from 2 to 3, the median per-grasp d\* from 1.0 to 1.8 cm, and agreement with the outcome from 79% to 84%. `analyze_b0.py` leaves out the grasps where a pad never touched (16 here) and gets 4 points, 1.9 cm and 86%; `results/midpoint/fig_failure.png` uses D19's counting for both pads. The held fractions by |d|/d\* were 25/31 below 0.5, 12/15 at 0.5–0.9, 2/9 at 0.9–1.1, 9/28 at 1.1–2 and 12/175 above 2, with a fitted 50% point at 0.87 against the model's 1.
 
 Tracing six trials showed where the contacts land: mostly on the pad's lower rows and middle columns, because GSNet approaches 7–28° off vertical, which tilts the pad against vertical sides, and because the objects' sides are curved, studded or tapered. Real grasps on these objects make small patches; it isn't a modelling artefact. I re-ran the step-1 calibration (R.1–R.3) with this pad as the nominal one.
 
@@ -294,3 +295,14 @@ The physics version of M2 doesn't beat B0, because its d\* predicted from the cl
 The lever arm about the visible centre carries most of the signal (AUC 0.79 alone). After it come the grasp depth (deeper is better, which fits the pads only touching on their lower rows in D20), the detector score and P(hold). This is `scripts/m2_learn.py`.
 
 The ceiling of 64% means there's a lot left. The next steps are refining the grasp depth so the pads cover more of the object, and M3, where the test lift measures the CoM and catches grasps that start to slip.
+
+## D24. Midpoint checks: fresh scenes, the retry bound, a rebuild, rollout videos
+
+**Fresh scenes.** M2's development numbers come from the same seeds it was calibrated on (with each object held out), so I froze the calibrated model, fitted once on every development grasp, and ran it on new seeds 6–11 (270 scenes, each scene's first 10 reachable grasps executed, `results/m045_fresh`). B0 succeeds in 89/270 (33%), M2 in 109/270 (40%): +7.4 points (95% CI +0.4 to +14.4, object bootstrap), the same gain as on the development set. At 6–8 cm it's +9.3; with no shift, 20/54 for both. Seeds 6–11 are now spent. Seeds 12–17 stay untouched for the final comparison. Nothing about M2 was chosen with the fresh results: model variants (stronger or weaker regularization, boosted trees, random forests, extra features) were compared only by leave-one-object-out on the development set, where none beat the logistic model by more than noise (112 to 121 of 270 against 116), so I kept it.
+
+**The retry bound.** Before building the real control of D13, I scored its upper bound on the executed candidates: if the first grasp fails for any reason, the second grasp in the same order is scored on the undisturbed scene. On the fresh scenes B0 + one blind retry reaches 46% (+13) and M2 + one retry 51% (+18). So retrying by itself accounts for most of a gain, and M2's choice adds about 5 points on top. The real control sets the object down and detects again, so it can only do worse than this bound. `scripts/midpoint_results.py`.
+
+**A rebuild on a new machine.** The first rented machine was deleted with the development scenes and detections on it. I rebuilt on a different machine (RTX 4090, different CPU) from `gpu/setup_gpu.sh` and the saved wheels, regenerated the 270 development scenes and re-ran GSNet and B0. Every scene gave bit-identical detections, B0 chose the same grasp in 270/270 trials and the outcome matched in 266/270 (`results/midpoint/reproduction.json`). The four differences are three contact blow-ups as the hand opens over the bin, which the trial labels as simulation artefacts, and one approach that diverged. CoACD's collision pieces differ between macOS and Linux for the same settings and seed, so the study runs and CoACD stay on Linux.
+
+**Rollout videos.** `scripts/render_rollouts.py` re-runs logged trials with a camera attached through a read-only hook in `run_b0.py`. Each of the 22 re-runs reproduced its logged outcome. The videos show the true CoM (red) and the visible centre the camera's cloud suggests (blue); the object is drawn see-through, which changes nothing in the physics.
+

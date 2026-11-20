@@ -121,12 +121,14 @@ def main():
     ap.add_argument("--weights", default="/root/weights")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--force", action="store_true", help="recompute even if the cached result exists")
+    ap.add_argument("--shard", default="0/1", help="i/n: this process takes every n-th scene from i (parallel runs)")
     a = ap.parse_args()
 
     names = sorted(f[:-4] for f in os.listdir(a.scenes) if f.endswith(".npz"))
     out_dir = os.path.join(a.out, a.detector)
     os.makedirs(out_dir, exist_ok=True)
-    todo = [n for n in names if a.force or not os.path.exists(os.path.join(out_dir, n + ".npz"))]
+    i, n_sh = (int(v) for v in a.shard.split("/"))
+    todo = [n for n in names[i::n_sh] if a.force or not os.path.exists(os.path.join(out_dir, n + ".npz"))]
     print(f"{a.detector}: {len(names)} scenes, {len(names) - len(todo)} cached, {len(todo)} to run")
     if not todo:
         return

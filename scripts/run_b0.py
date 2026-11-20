@@ -31,8 +31,9 @@ from anygrasp_pp import physics as P  # noqa: E402
 from anygrasp_pp import robot as RB  # noqa: E402
 from anygrasp_pp import scene as S  # noqa: E402
 
-MODELS = {"gso": "/root/src/mujoco_scanned_objects/models", "ycb": "/root/src/ycb/models"}
-SEEDS = 6
+MODELS = {"gso": os.environ.get("GSO_MODELS", "/root/src/mujoco_scanned_objects/models"),
+          "ycb": os.environ.get("YCB_MODELS", "/root/src/ycb/models")}
+SEEDS = 6                # development seeds 0-5; the final comparison uses fresh seeds (--seeds)
 JITTER = 0.03            # m, uniform xy jitter of the resting position
 COLLISION = "coacd"
 MASS_KG = float(os.environ.get("B0_MASS", O.MASS))   # object mass [kg] (D15, D21)
@@ -47,6 +48,26 @@ RETRACT_H = 0.10         # hand moves up this far after opening, before the bin 
 BIN_ABOVE = 0.40         # TCP height above the bin centre for the carry [m]
 BIN_YAWS = (0, 45, -45, 90, -90, 135, -135, 180)   # wrist turns tried for the carry [deg]
 RELEASE_CLEAR = 0.02     # lowest object point this far above the bin floor at release [m] (D22)
+DEPTH_ADD = float(os.environ.get("DEPTH_ADD", 0.0))   # probe: push each grasp this much deeper [m] (0 = as detected)
+TIP_CLEAR = 0.003        # the deepened fingertips stay this far above the table [m]
+FRAME_HOOK = None        # set by scripts/render_rollouts.py to record a trial; it only reads the state
+
+
+def deepened(R, t, depth):
+    """Grasp depth pushed DEPTH_ADD further along the approach, but never so deep that the lower corners of the
+    pads (17 mm wide along the grasp's height axis) come within TIP_CLEAR of the table."""
+    if DEPTH_ADD <= 0:
+        return depth
+    a, h = R[:, 0], R[:, 2]
+    if a[2] >= 0:
+        return depth
+    deepest = (t[2] - RB.PAD_HALF * abs(h[2]) - S.TABLE_Z - TIP_CLEAR) / -a[2]
+    return float(min(depth + DEPTH_ADD, max(depth, deepest)))
+
+
+def _phase(name):
+    if FRAME_HOOK is not None:
+        FRAME_HOOK.phase = name
 
 
 def feasible(r, mass=MASS_KG):
@@ -54,11 +75,11 @@ def feasible(r, mass=MASS_KG):
     return O.build(os.path.join(MODELS[r["source"]], r["name"]), collision=COLLISION, mass=mass)["core"] is not None
 
 
-def trials(final_set):
+def trials(final_set, seeds=range(SEEDS)):
     rows = [r for r in csv.DictReader(open(final_set)) if feasible(r)]
     return [dict(source=r["source"], name=r["name"], shift=s, seed=k,
                  tag=f"{r['name']}__s{int(round(s * 100))}__k{k}")
-            for r in rows for s in O.SHIFTS for k in range(SEEDS)]
+            for r in rows for s in O.SHIFTS for k in seeds]
 
 
 def build(tr, cache={}):
@@ -147,7 +168,8 @@ def choose_grasp(m, arm, scene, cache, skip=0):
             R = Rw[i].copy()
             if flip:                       # 180 deg about the approach axis
                 R[:, 1:] *= -1
-            p_g, R_g = RB.grasp_to_tcp(R, tw[i], g[i, 3])
+            dep = deepened(R, tw[i], float(g[i, 3]))
+            p_g, R_g = RB.grasp_to_tcp(R, tw[i], dep)
             a = R_g[:, 2]
             q_pre, ok1, _, _ = arm.ik(dk, p_g - PRE * a, R_g, RB.Q_READY)
             q_g, ok2, _, _ = arm.ik(dk, p_g, R_g, q_pre)
@@ -163,7 +185,7 @@ def choose_grasp(m, arm, scene, cache, skip=0):
                     break
                 if ok4:
                     return dict(index=int(i), rank=rank, tried=tried, flip=flip, score=float(g[i, 0]),
-                                width=float(g[i, 1]), depth=float(g[i, 3]), p_g=p_g, R_g=R_g, R_b=R_b,
+                                width=float(g[i, 1]), depth=dep, p_g=p_g, R_g=R_g, R_b=R_b,
                                 q_pre=q_pre, q_g=q_g, q_l=q_l, q_b=q_b, bin_yaw=yaw,
                                 approach_deg=float(np.degrees(np.arccos(-a[2]))))
     return dict(index=-1, tried=tried)
@@ -297,6 +319,8 @@ def run_one(args):
             mujoco.mj_step(m, d)
             if np.any(np.abs(d.ctrl[arm.act]) >= RB.TAU_MAX - 1e-9):
                 log["tau_sat"] += 1
+            if FRAME_HOOK is not None:
+                FRAME_HOOK(m, d)
 
         def rel():
             Rh = d.xmat[arm.hand].reshape(3, 3)
@@ -320,11 +344,13 @@ def run_one(args):
             log["finger_body"] |= bool(is_finger[other].any())
             return bool(is_pad[other].any())
 
+        _phase("reach")
         # 1. reach the pre-grasp (gripper opens on the way)
         t0 = d.time
         while d.time - t0 < T_REACH:
             q, qd, qdd = RB.min_jerk(RB.Q_CAPTURE, gr["q_pre"], T_REACH, d.time - t0)
             step(q, qd, RB.grip_ctrl_open(w_open), qdd)
+        _phase("descend")
         # 2. descend along the approach, dwell
         t0 = d.time
         while d.time - t0 < T_DESCEND:
@@ -338,6 +364,7 @@ def run_one(args):
                     and np.abs(d.qvel[arm.dadr]).max() < 1e-2):
                 break
         rec["tcp_error_mm"] = float(np.linalg.norm(arm.tcp_pose(d)[0] - gr["p_g"]) * 1e3)
+        _phase("close")
         # 3. close (Franka grasp: run the target past the object; the force clamp sets 70 N per pad) and squeeze
         t0 = d.time
         while d.time - t0 < T_CLOSE + T_SQUEEZE:
@@ -352,6 +379,7 @@ def run_one(args):
         rec["lever_arm_cm"] = float(abs(P.lever_arm(tcp, Rt[:, 1], d.xipos[obj])[0]) * 100)
         rec["com_shift_seen_cm"] = float(tr["shift"] * 100)
         grip = RB.grip_ctrl_closing(w_open, 1e9)
+        _phase("lift and hold")
         # 4. lift, hold
         t0 = d.time
         while d.time - t0 < LIFT_T + HOLD_T:
@@ -360,6 +388,7 @@ def run_one(args):
             if not track():
                 log["pad_lost_t"] += m.opt.timestep
         rec["tilt_after_hold"] = log["tilt_max"]
+        _phase("carry")
         # 5. carry to above the bin, gently (D22): up, then across; joint-space fallback if IK fails on the path
         segs = carry_path(arm, dk, gr["p_g"] + [0, 0, LIFT_H], gr["R_g"], gr["R_b"], gr["q_l"])
         rec["carry"] = "cartesian" if segs else "joint"
@@ -378,6 +407,7 @@ def run_one(args):
                 if not track():
                     log["pad_lost_t"] += m.opt.timestep
         q_top = segs[-1][0][-1] if segs else gr["q_b"]
+        _phase("place")
         # 6. lower until the object's lowest point (exact, from its mesh vertices) is RELEASE_CLEAR above the floor
         drop = max(0.0, lowest_point(m, d, obj_geoms) - (S.TABLE_Z + RELEASE_CLEAR))
         p_b = S.BIN_CENTER + [0, 0, BIN_ABOVE]
@@ -389,6 +419,7 @@ def run_one(args):
         t0 = d.time
         while d.time - t0 < T_RELEASE:
             step(lower[-1], np.zeros(7), RB.MAX_OPEN / 2)
+        _phase("release")
         # retract straight up with the hand open, as a robot does after letting go, then let the object settle (D22)
         p_low = p_b - [0, 0, min(drop, BIN_ABOVE - 0.05)]
         retract = line_qs(arm, dk, p_low, p_low + [0, 0, RETRACT_H], gr["R_b"], lower[-1])
@@ -437,8 +468,10 @@ def main():
     ap.add_argument("--final-set", default="results/objects/final_set.csv")
     ap.add_argument("--jobs", type=int, default=96)
     ap.add_argument("--only", default=None, help="comma-separated tags (debugging)")
+    ap.add_argument("--seeds", default=f"0:{SEEDS}", help="seed range start:stop (fresh seeds for the final run)")
     a = ap.parse_args()
-    trs = trials(a.final_set)
+    lo, hi = (int(v) for v in a.seeds.split(":"))
+    trs = trials(a.final_set, range(lo, hi))
     if a.only:
         trs = [t for t in trs if t["tag"] in a.only.split(",")]
     if a.cmd == "candidates":

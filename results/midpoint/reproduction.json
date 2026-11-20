@@ -1,0 +1,8 @@
+{
+ "trials": 270,
+ "same_grasp": 270,
+ "same_outcome": 266,
+ "same_success": 267,
+ "success_rerun": 93,
+ "success_logged": 96
+}

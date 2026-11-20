@@ -31,3 +31,7 @@ results/objects*/gtest*/eval_print.txt
 
 # MuJoCo warning log
 MUJOCO_LOG.TXT
+results/midpoint/videos/*__[LR][0-9]*.mp4
+results/*/scenes/
+results/*/cache/
+results/*/*_parts.jsonl
