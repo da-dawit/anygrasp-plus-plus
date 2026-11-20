@@ -1,0 +1,120 @@
+{
+ "n_trials": 270,
+ "outcomes": {
+  "turned in hand": 150,
+  "no grip (closed on air)": 9,
+  "dropped": 5,
+  "no grip (blocked on approach)": 8,
+  "success": 70,
+  "missed the bin": 21,
+  "no reachable grasp": 7
+ },
+ "success_by_shift_cm": {
+  "0": [
+   13,
+   54
+  ],
+  "2": [
+   10,
+   54
+  ],
+  "4": [
+   12,
+   54
+  ],
+  "6": [
+   18,
+   54
+  ],
+  "8": [
+   17,
+   54
+  ]
+ },
+ "success_by_object": {
+  "Elephant": [
+   0,
+   30
+  ],
+  "MINI_EXCAVATOR": [
+   11,
+   30
+  ],
+  "Shark": [
+   15,
+   30
+  ],
+  "SpiderMan_Titan_Hero_12Inch_Action_Figure_oo1qph4wwiW": [
+   11,
+   30
+  ],
+  "Thomas_Friends_Wooden_Railway_Deluxe_Track_Accessory_Pack": [
+   10,
+   30
+  ],
+  "Victor_Reversible_Bookend": [
+   10,
+   30
+  ],
+  "048_hammer": [
+   0,
+   30
+  ],
+  "072-a_toy_airplane": [
+   9,
+   30
+  ],
+  "073-g_lego_duplo": [
+   4,
+   30
+  ]
+ },
+ "no_shift_success": 0.24074074074074073,
+ "gripped_trials": 246,
+ "d50_cm": 1.6090005333428907,
+ "k_per_cm": 0.2677066894702455,
+ "d50_ci95_cm": [
+  0.048127582728061266,
+  3.7132073327392074
+ ],
+ "dstar_cm": [
+  9.661665665689325,
+  10.059330592852927
+ ],
+ "largest_hold_cm": 10.345114867256324,
+ "smallest_fail_cm": 0.09253474545084946,
+ "per_grasp": {
+  "trials": 231,
+  "ratio50": 1.077733074104359,
+  "ratio50_ci95": [
+   0.621239052544323,
+   1.6913876915982535
+  ],
+  "k": 1.6265117694867182,
+  "agreement": 0.8008658008658008,
+  "dstar_grasp_median_cm": 4.581732787762979,
+  "contact_points_weaker_pad_median": 4.0,
+  "held_by_ratio": {
+   "0-0.5": [
+    61,
+    69
+   ],
+   "0.5-0.9": [
+    16,
+    25
+   ],
+   "0.9-1.1": [
+    6,
+    19
+   ],
+   "1.1-2": [
+    14,
+    55
+   ],
+   "2-inf": [
+    7,
+    63
+   ]
+  }
+ }
+}

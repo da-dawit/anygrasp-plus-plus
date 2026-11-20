@@ -27,7 +27,7 @@ from anygrasp_pp.contact_rig import grid_points  # noqa: E402
 from anygrasp_pp.rig_trial import a_peak  # noqa: E402
 
 K_MAX = 50.0      # 1/cm: logistic slope bound (a 10-90% width of 0.09 cm, finer than the shift steps)
-MASS = 1.0        # D15
+MASS = float(os.environ.get("B0_MASS", 1.0))   # object mass of the run [kg] (D15, D21)
 
 
 def fit_d50(d, y):
@@ -98,11 +98,51 @@ def main():
           f"proposal criterion: within 1.5 cm")
     if len(hold) and len(fail):
         print(f"largest lever arm that held: {hold.max():.2f} cm; smallest that failed: {fail.min():.2f} cm")
+    # each grasp's own slip distance, from the pad contacts it made (A.12; D19): does |d| < d*_grasp predict holding?
+    has = [r for r in gripped if r.get("dstar_lift_cm") not in ("", None) and float(r["dstar_lift_cm"]) > 0]
+    ratio = np.array([float(r["lever_arm_cm"]) / float(r["dstar_lift_cm"]) for r in has])
+    held = np.array([float(float(r["tilt_after_hold"]) <= 10.0) for r in has])
+    objs2 = np.array([r["name"] for r in has])
+    r50, kr = fit_d50(ratio, held)
+    boots2 = []
+    for _ in range(a.boot):
+        pick = rng.choice(names, len(names), replace=True)
+        idx = np.concatenate([np.flatnonzero(objs2 == o) for o in pick])
+        if 0 < held[idx].sum() < len(idx):
+            boots2.append(fit_d50(ratio[idx], held[idx])[0])
+    rlo, rhi = np.percentile(boots2, [2.5, 97.5]) if boots2 else (np.nan, np.nan)
+    agree = float(np.mean((ratio < 1) == (held == 1)))
+    pts_min = np.array([min(int(r["n_pts_left"]), int(r["n_pts_right"])) for r in has])
+    bins = [(0, 0.5), (0.5, 0.9), (0.9, 1.1), (1.1, 2), (2, np.inf)]
+    out.update(per_grasp=dict(trials=len(has), ratio50=r50, ratio50_ci95=[rlo, rhi], k=kr, agreement=agree,
+                              dstar_grasp_median_cm=float(np.median([float(r["dstar_lift_cm"]) for r in has])),
+                              contact_points_weaker_pad_median=float(np.median(pts_min)),
+                              held_by_ratio={f"{lo}-{hi}": [int(held[(ratio >= lo) & (ratio < hi)].sum()),
+                                                            int(((ratio >= lo) & (ratio < hi)).sum())] for lo, hi in bins}))
+    print(f"per-grasp slip distance over {len(has)} trials: median d*_grasp "
+          f"{out['per_grasp']['dstar_grasp_median_cm']:.2f} cm ({np.median(pts_min):.0f} contact points on the weaker pad); "
+          f"held through lift and hold vs |d|/d*_grasp: 50% point at {r50:.2f} (95% CI {rlo:.2f}-{rhi:.2f}; the model "
+          f"says 1); |d| < d*_grasp agrees with the outcome in {100 * agree:.0f}% of trials")
+    for (lo, hi), v in zip(bins, out["per_grasp"]["held_by_ratio"].values()):
+        print(f"   |d|/d* in [{lo}, {hi}): held {v[0]}/{v[1]}")
     json.dump(out, open(os.path.join(a.out, "summary.json"), "w"), indent=1, default=float)
 
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    fig2, ax2 = plt.subplots(figsize=(7, 4))
+    jr = rng.uniform(-0.03, 0.03, len(held))
+    ax2.scatter(np.minimum(ratio, 8), held + jr, s=12, alpha=0.6, c=np.where(held == 1, "tab:green", "tab:red"))
+    xr = np.linspace(0, 8, 400)
+    ax2.plot(xr, 1 / (1 + np.exp(kr * (xr - r50))), "k-", lw=1.5, label=f"fit: 50% at |d|/d* = {r50:.2f}")
+    ax2.axvline(1.0, color="tab:blue", lw=2, alpha=0.5, label="model: holds while |d| < d*")
+    ax2.set_xlabel("lever arm / this grasp's slip distance  |d| / d*_grasp  (clipped at 8)")
+    ax2.set_ylabel("held through lift and hold")
+    ax2.set_title(f"B0, {len(has)} gripped trials: each grasp's own contact patch")
+    ax2.legend(loc="upper right", fontsize=8)
+    fig2.tight_layout()
+    fig2.savefig(os.path.join(a.out, "b0_held_vs_ratio.png"), dpi=120)
+
     fig, ax = plt.subplots(figsize=(7, 4))
     jit = rng.uniform(-0.03, 0.03, len(y))
     ax.scatter(d, y + jit, s=12, alpha=0.6, c=np.where(y == 1, "tab:green", "tab:red"))

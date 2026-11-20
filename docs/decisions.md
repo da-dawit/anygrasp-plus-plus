@@ -23,6 +23,8 @@ Every change from the proposal (`proposal/proposal_final.tex`), with the reason 
 | D17 | Simulated depth follows a RealSense D435 (stereo noise, shadows, edge dropout, 1 mm units) | 2026-11-20 |
 | D18 | B0 execution protocol: scene, grasp choice, controller, motion, outcome labels | 2026-11-20 |
 | D19 | First B0 run: the fingertip model is too stiff for real (imperfect) contact; recalibrate it | 2026-11-20 |
+| D20 | Fingertip = thin rubber layer (Winkler bed, 27.1 kN/m per point), validated against layer theory | 2026-11-20 |
+| D21 | Object mass re-chosen by D15's rule with the measured per-grasp d*: 0.45 kg; 1 kg kept as the heavy condition | 2026-11-20 |
 
 ---
 
@@ -345,3 +347,54 @@ The lever arm d is measured at the end of the squeeze from the pad midpoint, the
 4. Re-run the step-1 calibration checks.
 
 Then re-run B0. If the median per-grasp d\* still sits far from the middle of the shift range, the mass is re-chosen by D15's rule (d\* in the middle of the 0–8 cm range), using the measured per-grasp d\* instead of the flat-face value.
+
+## D20. The fingertip is a thin rubber layer (Winkler bed)
+
+**Model** (derivations B.6). The rubber layer of D4 (E = 3 MPa, h = 2 mm) is approximated as independent springs, one per grid cell: k_c = E·A_cell/h = 27.1 kN/m.
+
+**In MuJoCo.** Constant impedance (solimp 0.95 0.95) and a direct stiffness (solref −5537.89 −148.834) make every pad point a linear spring of K/((1−d)Â) (B.5). k is set so a free 1 kg object, the study's condition, sees exactly k_c per point: flat sink 0.161 mm at 70 N. The step-1 setting is kept as `CONTACT_V1`.
+
+**Validation** (`scripts/calibrate_pad_layer.py`, `results/pad/layer.json`; checks B.6). The pad is pressed at 70 N against a fixed object and compared with the Winkler solution at the same stiffness, with nothing refitted:
+
+| case | old pad (D6): engaged points / d\* | new pad: engaged / d\* | Winkler (new pad) |
+|---|---|---|---|
+| flat | 16 / 4.47 cm | 16 / 4.47 cm | 16 / 4.47 cm |
+| misaligned 1° | 12 / 3.08 cm | 16 / 3.52 cm | 16 / 3.52 cm |
+| misaligned 2° | 8 / 2.70 cm | 12 / 2.95 cm | 12 / 2.95 cm |
+| misaligned 4° | 4 / 2.38 cm | 8 / 2.68 cm | 8 / 2.67 cm |
+| cylinder, R = 15 mm | 8 / 3.43 cm | 8 / 3.43 cm | 8 / 3.40 cm |
+
+Per-point forces match the Winkler solution to within 0.05 N of 70 N. Both pads behave as Winkler beds at their own stiffness. The old one was about 2.2× stiffer than the physical layer (60 vs 27 kN/m per point), so misalignment confined the load to fewer rows.
+
+**Effect on B0** (1.0 kg; `results/b0/trials.csv`):
+
+- 34/300 successes, against 37 with the old pad. The success rate barely moves.
+- The contact patch grows: the median number of contact points on the weaker pad goes from 2 to 4, and the median per-grasp d\* from 1.0 to 1.9 cm.
+- The physics model predicts each grasp better: |d| < d\*_grasp agrees with holding through lift and hold in 86% of trials (79% with the old pad). Held fractions by |d|/d\*: 25/31 below 0.5, 12/15 at 0.5–0.9, 2/9 at 0.9–1.1, 9/28 at 1.1–2, 12/175 above 2. The fitted 50% point is |d|/d\* = 0.87; the model says 1.
+
+**Where the contacts are** (traced on six trials): mostly on the pad's lower (fingertip) rows and middle columns.
+
+- GSNet approaches 7–28° off vertical, which tilts the pad against vertical sides.
+- The objects' sides are curved, studded or have draft.
+
+So real grasps on these objects form small patches. That is physics, not a modelling artefact. The step-1 calibration (R.1–R.3) is re-run with the new nominal pad.
+
+## D21. Object mass by D15's rule with the measured per-grasp slip distance
+
+**Rule (D15, unchanged):** the typical slip distance should sit in the middle of the 0–8 cm shift range, so that grasps hold on one side and fail on the other. D15 applied it with the flat-face d\* (4.47 cm at 1 kg).
+
+**What B0 measured** (D19, D20): real grasps on real-shaped objects form small patches, and the median per-grasp d\* is 1.8 cm at 1 kg.
+
+Applying the same rule with the measured value gives d\* ∝ 1/m, so 1.8 cm × 1 kg / m ≈ 4 cm, i.e. **m ≈ 0.45 kg**. That is an ordinary household weight (the YCB hammer is 0.67 kg). The hidden cores scale with the mass, and the CoM positions, resting poses and grasps are unchanged.
+
+**The 1.0 kg runs stay on record as the "heavy" condition.**
+
+**The power drill at 0.45 kg.** An 8 cm shift needs 82% of its mass in the core, and D16's rule (shell at least 100 g, fixed before any run) caps that at 78% at 0.45 kg. The rule is kept, so the drill appears in the 1 kg condition only. The 0.45 kg run has 9 objects × 5 shifts × 6 seeds = 270 trials, on the same poses and noise as the 1 kg run, so the two can be compared trial by trial. `run_b0.py` skips any object whose core is infeasible at the run's mass.
+
+**Finding for the midpoint.** The proposal assumed B0 grasps near the visible centroid with a flat-face d\* of about 4.7 cm, and set "B0 ≥ 80% with no shift" as a sanity check. The pipeline shows instead:
+
+- B0's grasps sit a median 5 cm from the true CoM even with no shift, because a shape-only detector spreads its grasps along the object.
+- Their contact patches are small.
+- The CoM shift therefore changes B0's success much less than expected: grasps move both closer to and farther from the CoM.
+
+The physics model (A.12 with each grasp's own contacts) predicts each grasp's outcome, which is exactly what M2 needs to re-rank grasps.

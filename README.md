@@ -1,105 +1,79 @@
 # AnyGrasp++: checking the weight before trusting the grasp
 
-DA434 (Embodied Intelligence) final project, Dawit Chun.
+Final project for DA434 (Embodied Intelligence), Dawit Chun.
 
-A grasp detector picks objects from shape alone, so it fails when the weight sits where the shape does not show it (a hammer head, a half-full bottle). AnyGrasp++ keeps the detector frozen and adds three steps:
+Grasp detectors like AnyGrasp and GSNet pick grasps from the object's shape. That works until the weight sits somewhere the shape doesn't show: a hammer head, a drill battery, a half-full bottle. Then a grasp that looks fine twists out of the gripper as soon as the object leaves the table.
 
-- **M1 (reach filter):** inverse kinematics and whole-arm collision checks.
-- **M2 (physics score):** how likely each grasp is to hold, given the centre-of-mass estimate.
-- **M3 (test lift):** a short lift that reads the object's mass and centre of mass from the arm's joint torques, then regrasps if the grasp looks unsafe.
+AnyGrasp++ leaves the detector alone and adds three steps around it:
 
-Everything runs in MuJoCo with a Franka Panda.
+- **M1** keeps only grasps the arm can actually reach without hitting anything.
+- **M2** scores each grasp by how likely it is to hold, using a friction model of the fingertips and the current guess of where the centre of mass is.
+- **M3** does a short test lift, reads the object's mass and centre of mass from the arm's joint torques, and regrasps if the first grasp looks unsafe.
 
-## Status
+Everything runs in MuJoCo with a simulated Franka Panda.
 
-| Step | What | State |
-|---|---|---|
-| 1 | Contact calibration: gripper, fingertip and contact model checked against the slip physics | done |
-| 2 | Full arm, table, bin, camera, hidden-weight objects | in progress: 10 hidden-weight objects, D435 camera model done (D15-D17); arm, bin and B0 next |
-| 3 | GSNet detector (cached per scene) and baseline B0 | detectors running and checked (D14); B0 next |
-| 4 | M1–M3 and the B0 + blind-retry control | |
-| 5 | Stress tests and evaluation | |
+## Where it stands
 
-## Layout
+**Step 1, contact model (done).** I calibrated the gripper and fingertips so the simulator's slip behaviour matches the friction model the scoring relies on. The fingertip is modelled as a thin rubber layer and checked against layer theory.
 
-```
-anygrasp_pp/          library
-  physics.py          slip distance, required grip, patch limit surface, P(hold), margin (derivations A, C)
-  contact_rig.py      floating Franka hand + hidden-weight object; pad and contact models (B)
-  rig_trial.py        one grasp-lift-hold trial with full contact monitoring; twist-onset search
-  objects.py          scanned objects as solids: hidden core, mass properties, fidelity of the collision pieces (H)
-  scene.py            table, bin, overhead D435 depth camera, camera <-> world frames, resting poses (I)
-  robot.py            Panda with the step-1 hand, computed-torque control, IK, grasp -> hand pose (J)
-scripts/
-  calibrate_contact.py    step 1 sweeps and the parameter check (appendix R.1, R.2)
-  characterize_contact.py non-ideal grasps: yaw, offsets, curvature, tilt, lift speed (R.3)
-  panda_m3_numbers.py     test-lift accuracy and tare numbers from the real Panda arm (E.2, E.5)
-  check_derivations.py    independent checks of every derivation (85 checks)
-  select_objects.py       object selection over all 1030 scanned objects (D16)
-  render_candidates.py    contact sheet of candidate objects (needs a GL context, e.g. MUJOCO_GL=egl)
-  graspability_test.py    resting pose, overhead render (D435 depth model) and detector test per candidate (D16)
-  convert_ycb.py          YCB scans into the same layout as the scanned-objects library
-  make_collision.py       CoACD collision pieces, the same settings for every object
-  final_set.py            the study's object set from the test results (results/objects/final_set.csv)
-  run_b0.py               B0 trials: settle + render, then execute the detector's best reachable grasp (D18)
-  analyze_b0.py           midpoint numbers: success by shift, no-shift rate, failure point d50 vs d*
-  setup_assets.sh         downloads the robot model; verifies the detector weights
-gpu/                      runs on a rented Linux GPU, not on the Mac
-  setup_gpu.sh            pinned detector environment (full build, or reuse saved wheels)
-  detect_grasps.py        GSNet or graspnet-baseline, once per scene, cached
-  example_check.py        end-to-end check on the authors' example scene
-  requirements-gpu.lock.txt  exact package versions of the checked environment
-docs/
-  derivations.tex/.pdf    every equation, derived step by step, with the check that tests it
-  decisions.md            every change from the proposal, with the reason and the evidence
-results/                  generated tables, CSVs and figures (the PDF reads its tables from here)
-```
+**Step 2, scene and objects (done).** The scene has a Panda arm, a table, a bin and an overhead depth camera that mimics a RealSense D435, noise and shadows included. There are 10 test objects from the Google Scanned Objects and YCB sets, each with a hidden dense core that shifts its centre of mass by 0–8 cm without changing how it looks. I picked them from all 1108 scans with fixed rules: the core has to be physically possible, the object has to rest stably, and GSNet has to find grasps on it.
 
-## Setup
+**Step 3, baseline (done for the midpoint).** B0 takes GSNet's best grasp that the arm can reach and executes it: grasp, lift, hold, carry, drop in the bin. With 0.45 kg objects it succeeds in 26% of 270 trials; with 1 kg objects, 12% of 300. Almost every failure is the object twisting out of the fingers. GSNet's grasps land about 5 cm from the true centre of mass, and on real-shaped objects the fingertips only touch a small patch.
+
+The useful part is that the friction model predicts these outcomes grasp by grasp. Each grasp's slip distance can be computed from the patch it actually touches. Objects held when the lever arm was below that distance and fell when it was above: the fitted 50% point is at 1.08 times the predicted slip distance (95% CI 0.62–1.69), and the prediction matches the outcome in 80% of trials. That is the model M2 will use to rank grasps.
+
+**Steps 4–5 (next).** M1–M3, the "B0 + blind retry" control, stress tests and the final evaluation.
+
+The reasoning behind every change from the proposal is in `docs/decisions.md`. Every equation the code uses is derived in `docs/derivations.pdf`, and `scripts/check_derivations.py` tests each one (88 checks).
+
+## Running it
+
+You need conda and, for the detector, a Linux machine with an NVIDIA GPU.
 
 ```bash
 conda create -n da434 python=3.12 && conda activate da434
 pip install -r requirements.txt
-bash scripts/setup_assets.sh          # MuJoCo Menagerie Franka model, pinned commit
+bash scripts/setup_assets.sh        # downloads the Franka model at a pinned commit
+python scripts/check_derivations.py # about 5 minutes, should print 88/88
 ```
 
-**Detector weights** (needed from step 3) are not in this repository; their licence forbids redistribution. Download them in a browser and put them in `assets/weights/`:
+The detector weights can't be redistributed, so download them yourself and put them in `assets/weights/`:
 
-- GSNet, `minkuresunet_realsense.tar`, from github.com/graspnet/graspness_unofficial (Model Weights section)
-- graspnet-baseline, `checkpoint-rs.tar`, from github.com/graspnet/graspnet-baseline (backup detector)
+- GSNet: `minkuresunet_realsense.tar` from github.com/graspnet/graspness_unofficial
+- graspnet-baseline (backup): `checkpoint-rs.tar` from github.com/graspnet/graspnet-baseline
 
-`scripts/setup_assets.sh` checks their SHA-256 sums if they are present.
+`setup_assets.sh` verifies their checksums.
 
-## Detector machine (GPU)
+### The GPU part
 
-The detectors need CUDA and MinkowskiEngine, so they run on a rented Linux GPU (tested: RTX 3080, Ubuntu 24.04, NVIDIA driver 580). Copy `gpu/` and the two weight files to `/root/app` and `/root/weights`, then:
+GSNet needs CUDA and MinkowskiEngine, so I run it on a rented GPU (tested on an RTX 3080 with Ubuntu 24.04). Copy `gpu/` to the machine and the weights to `/root/weights`, then run `bash setup_gpu.sh`. The first run compiles everything in about 15 minutes. If you keep the wheels it builds, `bash setup_gpu.sh <wheel folder>` sets up a fresh machine in about 5 minutes. `python example_check.py make`, then `detect_grasps.py`, then `example_check.py check` should end with `SANITY PASS`.
+
+### The baseline runs
+
+These are heavy, so I run them on the same rented machine (it has many cores):
 
 ```bash
-bash setup_gpu.sh                    # first time: builds everything (~15 min, mostly the MinkowskiEngine compile)
-bash setup_gpu.sh /root/wheels_saved # later: reuse the saved wheels from assets/gpu_wheels/ (~5 min, no compiling)
-python example_check.py make && \
-  python detect_grasps.py --detector gsnet --scenes /root/run/scenes --out /root/run/cache && \
-  python example_check.py check      # expects SANITY PASS (reference: results/detector/example_check.txt)
+MUJOCO_GL=egl python scripts/run_b0.py scenes --out results/b0
+python gpu/detect_grasps.py --detector gsnet --scenes results/b0/scenes --out results/b0/cache
+python scripts/run_b0.py run --out results/b0
+python scripts/analyze_b0.py --trials results/b0/trials.csv --out results/b0
 ```
 
-The saved wheels run on RTX 30xx/40xx, A-series, A100 and L4/L40 cards (sm_80/86/89). Scene clouds go in as `<name>.npz` in the OpenCV camera frame; see the docstring of `detect_grasps.py`.
+Set `B0_MASS=0.45` for the nominal object mass. Without it the objects weigh 1 kg.
 
-## Reproduce step 1
+## What's where
 
-```bash
-python scripts/check_derivations.py       # ~5 min, expects 85/85
-python scripts/panda_m3_numbers.py        # seconds
-python scripts/calibrate_contact.py       # ~15 min
-python scripts/characterize_contact.py --contact rubber   # ~15 min
-python scripts/characterize_contact.py --contact rigid
-cd docs && tectonic -X compile derivations.tex
-```
+- `anygrasp_pp/` is the library: the friction physics, the contact rig from step 1, the hidden-weight objects, the scene and camera, and the robot and its controller.
+- `scripts/` holds everything that produces a result: calibration, object selection, the baseline trials and the analysis.
+- `gpu/` holds the detector setup and the wrapper that runs it once per scene.
+- `docs/` holds the decision log and the derivations.
+- `results/` holds generated tables, CSVs and figures.
 
-## Licences of third-party parts
+## Third-party parts
 
-- MuJoCo Menagerie (Franka models): Apache-2.0, downloaded by the setup script.
-- Google Scanned Objects (Downs et al., ICRA 2022): CC-BY 4.0; MuJoCo models by K. Zakka (github.com/kevinzakka/mujoco_scanned_objects, MIT). Not stored here; the scripts read them from a clone.
-- YCB object and model set (Calli et al., 2015): CC-BY 4.0, downloaded from the YCB site's google_16k scans.
-- CoACD (Wei et al., SIGGRAPH 2022): MIT, used to make collision pieces.
-- GSNet and graspnet-baseline: academic or non-profit noncommercial research use only. They are used, not redistributed (sources are cloned at pinned commits by `gpu/setup_gpu.sh`; weights and compiled wheels stay out of git).
-- MinkowskiEngine (GSNet authors' fork) and graspnetAPI: MIT.
+- Franka model from MuJoCo Menagerie (Apache-2.0), downloaded by the setup script.
+- Google Scanned Objects (Downs et al., ICRA 2022, CC-BY 4.0), using K. Zakka's MuJoCo conversions (MIT).
+- YCB object set (Calli et al., 2015, CC-BY 4.0).
+- CoACD for collision shapes (MIT).
+- GSNet and graspnet-baseline are licensed for noncommercial research only. The setup script clones them at fixed commits; their weights and compiled packages are not in this repository.
+- MinkowskiEngine and graspnetAPI (MIT).

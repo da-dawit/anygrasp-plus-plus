@@ -1,0 +1,123 @@
+{
+ "k_cell": 27093.750000000004,
+ "k_acc": 5537.887224934148,
+ "d": 0.95,
+ "setting": {
+  "solref": "-5537.89 -148.834",
+  "solimp": "0.95 0.95 0.001",
+  "noslip": 2000
+ },
+ "rows": [
+  {
+   "case": "flat",
+   "engaged_winkler": 16,
+   "engaged_mujoco": 16,
+   "force_rms_error_N": 3.1796787425264483e-13,
+   "total_N": 70.00000000000507,
+   "dstar_winkler_cm": 4.468938654672148,
+   "dstar_mujoco_cm": 4.468938654672484,
+   "sink_max_mm": 0.07267233988734198,
+   "pad": "current pad"
+  },
+  {
+   "case": "misaligned 1 deg",
+   "engaged_winkler": 12,
+   "engaged_mujoco": 12,
+   "force_rms_error_N": 0.17228307823115244,
+   "total_N": 70.010662961665,
+   "dstar_winkler_cm": 3.11350626682723,
+   "dstar_mujoco_cm": 3.077088055877601,
+   "sink_max_mm": 0.1685330495945097,
+   "pad": "current pad"
+  },
+  {
+   "case": "misaligned 2 deg",
+   "engaged_winkler": 8,
+   "engaged_mujoco": 8,
+   "force_rms_error_N": 0.34026295054366423,
+   "total_N": 70.04266809872264,
+   "dstar_winkler_cm": 2.7348612913368138,
+   "dstar_mujoco_cm": 2.7002734176613354,
+   "sink_max_mm": 0.2116993233097623,
+   "pad": "current pad"
+  },
+  {
+   "case": "misaligned 4 deg",
+   "engaged_winkler": 4,
+   "engaged_mujoco": 4,
+   "force_rms_error_N": 0.021366608006015753,
+   "total_N": 70.17093286404811,
+   "dstar_winkler_cm": 2.3725900715578394,
+   "dstar_mujoco_cm": 2.380051257260245,
+   "sink_max_mm": 0.25950010689619823,
+   "pad": "current pad"
+  },
+  {
+   "case": "cylinder R 15 mm",
+   "engaged_winkler": 8,
+   "engaged_mujoco": 8,
+   "force_rms_error_N": 0.05288236402364862,
+   "total_N": 70.59829565130077,
+   "dstar_winkler_cm": 3.3976256416082893,
+   "dstar_mujoco_cm": 3.4278271302161745,
+   "sink_max_mm": 0.14266020142967262,
+   "pad": "current pad"
+  },
+  {
+   "case": "flat",
+   "engaged_winkler": 16,
+   "engaged_mujoco": 16,
+   "force_rms_error_N": 7.988631978150806e-11,
+   "total_N": 69.9999999987218,
+   "dstar_winkler_cm": 4.468938654672148,
+   "dstar_mujoco_cm": 4.468938654587962,
+   "sink_max_mm": 0.1219756780679094,
+   "pad": "layer pad"
+  },
+  {
+   "case": "misaligned 1 deg",
+   "engaged_winkler": 16,
+   "engaged_mujoco": 16,
+   "force_rms_error_N": 0.0008059835473091388,
+   "total_N": 70.01066296493248,
+   "dstar_winkler_cm": 3.5153929536070256,
+   "dstar_mujoco_cm": 3.516414623598835,
+   "sink_max_mm": 0.2332533448785889,
+   "pad": "layer pad"
+  },
+  {
+   "case": "misaligned 2 deg",
+   "engaged_winkler": 12,
+   "engaged_mujoco": 12,
+   "force_rms_error_N": 0.003839344299037684,
+   "total_N": 70.04266809798483,
+   "dstar_winkler_cm": 2.9476804273552344,
+   "dstar_mujoco_cm": 2.9511215816748444,
+   "sink_max_mm": 0.3110562292846218,
+   "pad": "layer pad"
+  },
+  {
+   "case": "misaligned 4 deg",
+   "engaged_winkler": 8,
+   "engaged_mujoco": 8,
+   "force_rms_error_N": 0.01767895885096399,
+   "total_N": 70.17093286870312,
+   "dstar_winkler_cm": 2.667999968374763,
+   "dstar_mujoco_cm": 2.678137573976146,
+   "sink_max_mm": 0.3927795711791784,
+   "pad": "layer pad"
+  },
+  {
+   "case": "cylinder R 15 mm",
+   "engaged_winkler": 8,
+   "engaged_mujoco": 8,
+   "force_rms_error_N": 0.053564473356309934,
+   "total_N": 70.60601283745494,
+   "dstar_winkler_cm": 3.3976256416082893,
+   "dstar_mujoco_cm": 3.428216634478721,
+   "sink_max_mm": 0.2460633456938099,
+   "pad": "layer pad"
+  }
+ ],
+ "k_fixed_object": 35867.806346477955
+}

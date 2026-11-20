@@ -22,7 +22,7 @@ from scipy.stats import norm, binom, chi2
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from anygrasp_pp import physics as P  # noqa: E402
-from anygrasp_pp.contact_rig import (build_xml, grid_points, grip_target, CONTACT, DEFAULT_CONTACT,  # noqa: E402
+from anygrasp_pp.contact_rig import (build_xml, grid_points, grip_target, CONTACT, CONTACT_V1, DEFAULT_CONTACT,  # noqa: E402
                                      BOX_HALF, X_HIDDEN, OPEN, FRANKA, PAD_Z)
 
 rng = np.random.default_rng(0)
@@ -301,18 +301,43 @@ def imp(r, solimp):
     return d0 + y * (dw - d0)
 
 
-for name, contact in (("stiff (CONTACT)", CONTACT), ("MuJoCo default", DEFAULT_CONTACT)):
+for name, contact in (("rubber layer (CONTACT)", CONTACT), ("step-1 rubber (CONTACT_V1)", CONTACT_V1),
+                      ("MuJoCo default", DEFAULT_CONTACT)):
     mm, dm = grasp_rig(build_xml(0.0, pads="point", contact=contact))
     i = pad_contacts(mm, dm)[0]
     c = dm.contact[i]
     row = c.efc_address
     f, Ahat, depth = dm.efc_force[row], dm.efc_diagA[row], -dm.efc_pos[row]
-    tc, zeta = c.solref
-    dmax = c.solimp[1]
-    pred = brentq(lambda rr: rr - (1 - imp(rr, c.solimp)) * Ahat * f * dmax**2 * tc**2 * zeta**2 / imp(rr, c.solimp)**2,
-                  0.0, 0.05)
+    if c.solref[0] > 0:                     # time constant and damping ratio: k = 1/(dmax^2 tc^2 zeta^2)
+        tc, zeta = c.solref
+        k_ref = 1.0 / (c.solimp[1]**2 * tc**2 * zeta**2)
+    else:                                   # direct stiffness and damping (B.5, B.6): k = -solref[0] / dmax^2
+        k_ref = -c.solref[0] / c.solimp[1]**2
+    pred = brentq(lambda rr: rr - (1 - imp(rr, c.solimp)) * Ahat * f / (k_ref * imp(rr, c.solimp)**2), 0.0, 0.05)
     check("B.5", "mj", abs(pred / depth - 1) < 0.02,
           f"{name}: depth formula {pred*1000:.4f} mm vs MuJoCo {depth*1000:.4f} mm (f = {f:.1f} N, A_hat = {Ahat:.3f})")
+
+sys.path.insert(0, str(ROOT / "scripts"))
+import calibrate_pad_layer as CPL  # noqa: E402
+
+free = CPL.squeeze(CONTACT, fixed=False)
+k_free = np.median(free[:, 3] / free[:, 2])
+check("B.6", "mj", abs(k_free / CPL.K_CELL - 1) < 0.02 and len(free) == 16,
+      f"rubber layer on a free 1 kg box: {k_free:.0f} N/m per point (E A_cell / h = {CPL.K_CELL:.0f}), "
+      f"sink {free[:, 2].mean() * 1e3:.3f} mm at 70 N")
+fixed_flat = CPL.squeeze(CONTACT)
+k_fix = np.median(fixed_flat[:, 3] / fixed_flat[:, 2])
+rows_ = []
+gp = CPL.grid_xz()
+for th in (1.0, 2.0, 4.0):
+    CPL.compare(f"misaligned {th:.0f} deg", CPL.squeeze(CONTACT, yaw_deg=th),
+                np.tan(np.radians(th)) * (gp[:, 0] - gp[:, 0].min()), rows_, k_fix)
+CPL.compare("cylinder R 15 mm", CPL.squeeze(CONTACT, shape="cylinder", size=(0.10, 0.015)), gp[:, 1] ** 2 / 0.03,
+            rows_, k_fix)
+check("B.6", "mj", all(r["engaged_mujoco"] == r["engaged_winkler"] and r["force_rms_error_N"] < 0.5
+                       and abs(r["dstar_mujoco_cm"] - r["dstar_winkler_cm"]) < 0.05 for r in rows_),
+      "misaligned 1/2/4 deg and a 15 mm cylinder: engaged points, per-point forces (rms < 0.5 N) and d* match "
+      "the Winkler layer")
 
 # ============================================================================ C. scoring
 L, xs = sp.symbols("L", positive=True), sp.symbols("x", real=True)

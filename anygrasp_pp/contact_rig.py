@@ -43,7 +43,15 @@ CLOSE_SPEED = 0.1               # [m/s], Franka Hand max finger speed
 # Nominal fingertip = thin rubber layer: 70 N over 17 x 17 mm is 0.24 MPa; a 2 mm layer with E ~ 3 MPa compresses
 # ~0.16 mm. These settings sink 0.11 mm on the 0.6 kg box. RIGID_CONTACT (0.003-0.007 mm) = hard plastic pads,
 # kept as a sensitivity case because misaligned grasps depend strongly on pad softness (appendix R.3).
-CONTACT = dict(solref="0.01 1", solimp="0.95 0.99 0.001", noslip=2000)
+# Nominal fingertip (D20): a thin rubber layer, E = 3 MPa, h = 2 mm, modelled as a Winkler bed -- every grid point
+# is a linear spring k_c = E A_cell / h = 27.1 kN/m, so a load concentrated on a few points sinks proportionally
+# and spreads onto its neighbours, as the layer does (derivations B.6, scripts/calibrate_pad_layer.py). Constant
+# impedance (solimp d d) keeps the spring linear (K/((1-d) A_hat) per point, B.5); the direct stiffness (solref -K -b) is set so a free 1 kg object
+# sees 27.1 kN/m per point (flat sink 0.161 mm at 70 N).
+CONTACT = dict(solref="-5537.89 -148.834", solimp="0.95 0.95 0.001", noslip=2000)
+# Step-1 nominal (D6), kept for comparison: 60 kN/m per point and stiffening with depth, so misaligned or curved
+# contacts loaded only the edge rows (D19).
+CONTACT_V1 = dict(solref="0.01 1", solimp="0.95 0.99 0.001", noslip=2000)
 RIGID_CONTACT = dict(solref="0.004 1", solimp="0.99 0.999 0.001", noslip=2000)
 DEFAULT_CONTACT = dict(solref=None, solimp=None, noslip=0)       # MuJoCo defaults, for comparison only
 

@@ -323,9 +323,23 @@ where:
   \item At rest the constraint acceleration $a_0 + Af$ is zero, and $v = 0$. So $Rf = a_{\text{ref}} = -k\,d\,r$.
   \item Substitute $R$ and $k$, and take magnitudes. \hfill $\square$
 \end{enumerate}
-\textbf{Consequences.} Depth grows with $\hat A$. A heavy weight far from the body's origin raises the body's $\hat A$, which is why version 1 saw depths of 1.2--7.5\,mm grow with the shift. With object-owned contacts, the grid pad now sinks 0.11\,mm (rubber, nominal) or 0.003--0.007\,mm (rigid). The rubber value matches a physical estimate for a 2\,mm rubber layer (decisions D4).
+\textbf{Consequences.} Depth grows with $\hat A$. A heavy weight far from the body's origin raises the body's $\hat A$, which is why version 1 saw depths of 1.2--7.5\,mm grow with the shift. With object-owned contacts, the step-1 grid pad sank 0.11\,mm (rubber) or 0.003--0.007\,mm (rigid). The nominal pad is now the rubber layer of B.6: 0.161\,mm on a flat face of a free 1\,kg object, the physical estimate for a 2\,mm layer (decisions D4, D20).
 \fix{Version 1 attributed the trend to the exact effective mass at the contact and could not reproduce the depths (it used the pad's own parameters, not the averaged ones). The formula above reproduces MuJoCo's depth to within 2\%.}
-\meta{B.5 [mj] (formula vs MuJoCo's depth, for stiff and default contacts)}{(diagnostic)}
+With a direct stiffness (solref $= (-K, -b)$, used from B.6 on), MuJoCo sets $k = K/d_{\max}^2$, so $r = (1-d)\hat A f\,d_{\max}^2/(K\,d^2)$. With a constant impedance $d = d_{\max}$ each contact is a linear spring of stiffness $K/((1-d)\hat A)$.
+\fix{The first form of this line omitted MuJoCo's division by $d_{\max}^2$ and was 11\% off; check B.5 caught it. The pad's stiffness was always set by measurement (B.6), so it was not affected.}
+\meta{B.5 [mj] (formula vs MuJoCo's depth, for the layer pad, the step-1 pad and default contacts)}{(diagnostic)}
+
+\subsection{The fingertip as a thin rubber layer}
+\textbf{Model.} A rubber layer of thickness $h$ and Young's modulus $E$ on a rigid finger is approximated, when the loaded region is wider than $h$, as a bed of independent springs (Winkler foundation; it ignores the shear coupling between neighbouring cells and the stiffening of a bonded, nearly incompressible layer): the pressure is $E\,\delta/h$ where it sinks by $\delta$. One cell of the $4\times4$ grid has area $A_c = (17\text{ mm}/4)^2 = 18.1$\,mm$^2$, so it is a spring
+\begin{equation}\label{eq:winkler}
+k_c = \frac{E\,A_c}{h} = 27.1\ \text{kN/m}\quad(E = 3\text{ MPa},\ h = 2\text{ mm}).
+\end{equation}
+Against a surface whose gap to the pad face is $s_i$ at cell $i$, the cells sink $\delta_i = \max(0, \delta_0 - s_i)$, with $\delta_0$ fixed by the squeeze force $F = k_c\sum_i\delta_i$: flat face $s_i = 0$ (each cell $F/16$, sink 0.161\,mm at 70\,N); a face misaligned by $\theta$ across the pad $s_i = x_i\tan\theta$; a cylinder of radius $R$ along the pad $s_i = z_i^2/2R$.
+
+\textbf{In MuJoCo.} By B.5, a constant impedance and a direct stiffness $K$ make every pad point a linear spring of stiffness $K/((1-d)\hat A)$. $\hat A$ is dominated by the finger, so it is nearly the same for every point. $k$ is set so that a free 1\,kg object, the study's condition, sees exactly $k_c$ per point.
+
+\textbf{Why.} The step-1 pad was calibrated only on perfectly aligned flat faces. At 60\,kN/m per point, and stiffening with depth, any misalignment above about $0.4^\circ$ loaded only the edge rows, and the full B0 pipeline ran on 1--2 contact points per pad (decisions D19). Both pads match the Winkler model with their own stiffness; the layer pad has the physical one.
+\meta{B.6 [mj] (per-point stiffness $= k_c$ on a free 1\,kg object; misaligned 1/2/4$^\circ$ and a 15\,mm cylinder: engaged points, forces and $\dstar$ match the Winkler solution)}{scripts/calibrate\_pad\_layer.py, contact\_rig.CONTACT}
 
 % =====================================================================
 \section{Scoring grasps under CoM uncertainty (M2)}

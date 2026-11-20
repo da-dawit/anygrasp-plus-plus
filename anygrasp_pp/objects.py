@@ -148,7 +148,7 @@ def parts(occ, bridge=1, min_frac=0.02):
     return int((sizes >= min_frac * occ.sum()).sum())
 
 
-def build(model_dir, voxel=VOXEL, wall=WALL, collision="vhacd"):
+def build(model_dir, voxel=VOXEL, wall=WALL, collision="vhacd", mass=MASS):
     """Everything about one object: solid voxels, principal frame, heavy-end core, properties per shift."""
     occ, origin = occupancy(convex_pieces(model_dir, collision), voxel)
     idx = np.argwhere(occ)
@@ -157,12 +157,12 @@ def build(model_dir, voxel=VOXEL, wall=WALL, collision="vhacd"):
     x = (points - c) @ axes[0]
     k = max(1, int(round(wall / voxel)))
     eroded = ndimage.binary_erosion(occ, iterations=k)[tuple(idx.T)]
-    core = choose_core(x, eroded, voxel)
+    core = choose_core(x, eroded, voxel, M=mass)
     out = dict(occ=occ, origin=origin, points=points, centroid=c, axes=axes, core=core,
                length=np.ptp(x), volume=len(points) * voxel ** 3, parts=parts(occ))
     if core is not None:
         e = core["sign"] * axes[0]                   # unit vector toward the heavy end
         out["heavy_axis"] = e
-        out["props"] = {s: mass_properties(points, core, s, voxel) for s in SHIFTS}
+        out["props"] = {s: mass_properties(points, core, s, voxel, M=mass) for s in SHIFTS}
         out["shift_check"] = {s: float((out["props"][s]["com"] - c) @ e) for s in SHIFTS}
     return out

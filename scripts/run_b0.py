@@ -34,6 +34,7 @@ MODELS = {"gso": "/root/src/mujoco_scanned_objects/models", "ycb": "/root/src/yc
 SEEDS = 6
 JITTER = 0.03            # m, uniform xy jitter of the resting position
 COLLISION = "coacd"
+MASS_KG = float(os.environ.get("B0_MASS", O.MASS))   # object mass [kg] (D15, D21)
 MAX_TILT = 10.0          # deg (D2)
 MAX_WIDTH = 0.08         # reported width (D14)
 D3_DEG = 30.0
@@ -46,8 +47,13 @@ BIN_YAWS = (0, 45, -45, 90, -90, 135, -135, 180)   # wrist turns tried for the c
 RELEASE_CLEAR = 0.04     # lowest object point this far above the bin floor at release [m]
 
 
+def feasible(r, mass=MASS_KG):
+    """Can this object hide the largest shift at this mass (D16 rule: core <= tungsten, shell >= 100 g)?"""
+    return O.build(os.path.join(MODELS[r["source"]], r["name"]), collision=COLLISION, mass=mass)["core"] is not None
+
+
 def trials(final_set):
-    rows = list(csv.DictReader(open(final_set)))
+    rows = [r for r in csv.DictReader(open(final_set)) if feasible(r)]
     return [dict(source=r["source"], name=r["name"], shift=s, seed=k,
                  tag=f"{r['name']}__s{int(round(s * 100))}__k{k}")
             for r in rows for s in O.SHIFTS for k in range(SEEDS)]
@@ -59,7 +65,7 @@ def build(tr, cache={}):
     key = (tr["source"], tr["name"])
     if key not in cache:
         model_dir = os.path.join(MODELS[tr["source"]], tr["name"])
-        ob = O.build(model_dir, collision=COLLISION)
+        ob = O.build(model_dir, collision=COLLISION, mass=MASS_KG)
         cache[key] = (model_dir, ob, S.rest_poses(ob)[0])
     model_dir, ob, pose = cache[key]
     rng = np.random.default_rng(zlib.crc32(f"{tr['name']}|{tr['seed']}".encode()))   # same pose at every shift
@@ -212,7 +218,7 @@ def contact_dstar(m, d, arm, is_obj, is_pad, ob, mass=O.MASS):
 def run_one(args):
     tr, out = args
     import mujoco
-    rec = dict(tr)
+    rec = dict(tr, mass_kg=MASS_KG)
     try:
         m, d, arm, ob = build(tr)
         settle(m, d, arm)
@@ -297,7 +303,7 @@ def run_one(args):
         g1, g2 = d.contact.geom1[:n], d.contact.geom2[:n]
         touch = is_obj[g1] ^ is_obj[g2]
         rec["pads_on_object"] = int(is_pad[np.where(is_obj[g1], g2, g1)[touch]].sum())
-        rec.update(contact_dstar(m, d, arm, is_obj, is_pad, ob))
+        rec.update(contact_dstar(m, d, arm, is_obj, is_pad, ob, mass=MASS_KG))
         tcp, Rt = arm.tcp_pose(d)
         rec["lever_arm_cm"] = float(abs(P.lever_arm(tcp, Rt[:, 1], d.xipos[obj])[0]) * 100)
         rec["com_shift_seen_cm"] = float(tr["shift"] * 100)
