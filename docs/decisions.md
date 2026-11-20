@@ -28,6 +28,7 @@ This is where I record every change from the proposal (`proposal/proposal_final.
 | D22 | A gentler carry, an exact release, and what counts as in the bin | 2026-11-20 |
 | D23 | First M2 results on the development set | 2026-11-20 |
 | D24 | Midpoint checks: fresh scenes, the retry bound, a rebuild, rollout videos | 2026-11-21 |
+| D25 | Grasping deeper doesn't help (a probe) | 2026-11-21 |
 
 ---
 
@@ -305,4 +306,10 @@ The ceiling of 64% means there's a lot left. The next steps are refining the gra
 **A rebuild on a new machine.** The first rented machine was deleted with the development scenes and detections on it. I rebuilt on a different machine (RTX 4090, different CPU) from `gpu/setup_gpu.sh` and the saved wheels, regenerated the 270 development scenes and re-ran GSNet and B0. Every scene gave bit-identical detections, B0 chose the same grasp in 270/270 trials and the outcome matched in 266/270 (`results/midpoint/reproduction.json`). The four differences are three contact blow-ups as the hand opens over the bin, which the trial labels as simulation artefacts, and one approach that diverged. CoACD's collision pieces differ between macOS and Linux for the same settings and seed, so the study runs and CoACD stay on Linux.
 
 **Rollout videos.** `scripts/render_rollouts.py` re-runs logged trials with a camera attached through a read-only hook in `run_b0.py`. Each of the 22 re-runs reproduced its logged outcome. The videos show the true CoM (red) and the visible centre the camera's cloud suggests (blue); the object is drawn see-through, which changes nothing in the physics.
+
+## D25. Grasping deeper doesn't help (a probe)
+
+D23 found that deeper grasps succeed more often, and D20 that the pads mostly touch on their lower rows, so I tested the simplest fix: push every grasp 1 cm further along its approach, but never so deep that the lower pad corners come within 3 mm of the table (`DEPTH_ADD=0.01` in `run_b0.py`, `results/depth_p1`). I executed the same development grasps again (2,700 trials, 1,496 matched to the same grasp at its detected depth; mean extra depth 9.3 mm).
+
+It didn't help. Per grasp, success went from 31.4% to 32.6%: 122 grasps improved and 104 got worse (exact McNemar p = 0.26). The patch didn't grow either: the median contact count fell from 4 to 3 and the median d\* from 4.1 to 3.8 cm. More grasps closed on air (87 to 118) or were blocked on the way down (78 to 92). So the depth signal in M2 reflects which grasps GSNet chooses, not depth itself. I dropped depth refinement and put the time into M3.
 
