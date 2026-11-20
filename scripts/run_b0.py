@@ -64,6 +64,7 @@ def build(tr, cache={}):
     import mujoco
     key = (tr["source"], tr["name"])
     if key not in cache:
+        cache.clear()                     # keep one object per worker: 128 workers caching every object ran out of memory
         model_dir = os.path.join(MODELS[tr["source"]], tr["name"])
         ob = O.build(model_dir, collision=COLLISION, mass=MASS_KG)
         cache[key] = (model_dir, ob, S.rest_poses(ob)[0])
@@ -370,7 +371,7 @@ def main():
     ap.add_argument("--k", type=int, default=10, help="grasps per scene for 'candidates'")
     ap.add_argument("--out", default="results/b0")
     ap.add_argument("--final-set", default="results/objects/final_set.csv")
-    ap.add_argument("--jobs", type=int, default=128)
+    ap.add_argument("--jobs", type=int, default=96)
     ap.add_argument("--only", default=None, help="comma-separated tags (debugging)")
     a = ap.parse_args()
     trs = trials(a.final_set)
@@ -379,13 +380,28 @@ def main():
     if a.cmd == "candidates":
         trs = [dict(t, cand=c) for t in trs for c in range(a.k)]
     os.makedirs(os.path.join(a.out, "scenes"), exist_ok=True)
-    with Pool(min(a.jobs, len(trs))) as pool:
-        if a.cmd == "scenes":
+    if a.cmd == "scenes":
+        with Pool(min(a.jobs, len(trs)), maxtasksperchild=20) as pool:
             res = pool.map(scene_one, [(t, a.out) for t in trs], chunksize=1)
-            print(f"{len(res)} scenes; detector input points: min {min(n for _, n in res)}, "
-                  f"median {int(np.median([n for _, n in res]))}")
-            return
-        rows = pool.map(run_one, [(t, a.out) for t in trs], chunksize=1)
+        print(f"{len(res)} scenes; detector input points: min {min(n for _, n in res)}, "
+              f"median {int(np.median([n for _, n in res]))}")
+        return
+    # every finished trial is appended at once, so a crash or a killed worker loses nothing and a rerun resumes
+    parts = os.path.join(a.out, f"{a.cmd}_parts.jsonl")
+    key = lambda r: f"{r['tag']}#{r.get('cand', 0)}"
+    done = {}
+    if os.path.exists(parts):
+        for line in open(parts):
+            r = json.loads(line)
+            done[key(r)] = r
+    todo = [t for t in trs if key(t) not in done]
+    print(f"{len(trs)} trials, {len(done)} already done, {len(todo)} to run", flush=True)
+    with Pool(min(a.jobs, max(len(todo), 1)), maxtasksperchild=20) as pool, open(parts, "a") as f:
+        for r in pool.imap_unordered(run_one, [(t, a.out) for t in todo], chunksize=4):
+            f.write(json.dumps(r, default=float) + "\n")
+            f.flush()
+            done[key(r)] = r
+    rows = [done[key(t)] for t in trs if key(t) in done]
     keys = sorted({k for r in rows for k in r})
     with open(os.path.join(a.out, "candidates.csv" if a.cmd == "candidates" else "trials.csv"), "w", newline="") as f:
         w = csv.DictWriter(f, keys)
