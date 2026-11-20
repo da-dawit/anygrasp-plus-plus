@@ -247,6 +247,8 @@ Relaxing the length to 15 cm or the shell to 50 g adds no objects; the 8 cm shif
 
 - At 30° only an elephant figure, an excavator toy, a shark toy, a bookend and a wooden track piece pass. The mallet, flashlight, dustpan and boxes get grasps, but GSNet's grasps on them are mostly steep side grasps (median 73° from vertical) or collide; on the flashlight the body is 7.5 cm, too wide for the hand.
 
+- **Camera angle is not the cause.** With the camera straight down (the GSNet authors' real-robot setup) instead of 22.6° off vertical, the passing objects get more usable grasps (the elephant at least 9 per yaw instead of 4), but the same objects fail. At 30° GSNet passes 5 and the baseline 6 (`results/objects/gtest_tilt0/`).
+
 **Open (decided with the user next):** the realistic GSO set cannot supply 20 hidden-weight objects that the detector grasps reliably from above. The options are to relax D3, to add objects from another scanned set, or to run fewer objects with more seeds. Collision geometry (below) and the camera noise model (proposal L7) may also change GSNet's grasps, since it was trained on real, noisy depth.
 
 **Collision fidelity:** the scans' V-HACD collision pieces bulge a median 6.7 mm (95th percentile) beyond the visible surface, enough to put the fingers on material the camera cannot see. The chosen objects get new collision pieces from CoACD (named in the proposal), checked with the same bulge/gap measure (`objects.fidelity`).

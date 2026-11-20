@@ -57,7 +57,8 @@ def settle(model_dir, ob, pos, Rf, shift):
 
 
 def render_one(args):
-    name, out = args
+    name, out, tilt = args
+    cam = S.camera_position(tilt)
     import mujoco
     model_dir = os.path.join(MODELS, name)
     ob = O.build(model_dir)
@@ -72,7 +73,7 @@ def render_one(args):
     for yaw in YAWS:
         pos, Rf = place(ob, pose, yaw)
         moves = {s: settle(model_dir, ob, pos, Rf, s) for s in (0.0, max(O.SHIFTS))}
-        xml = S.scene_xml([S.object_xml("obj", model_dir, ob, 0.0, pos, Rf)])
+        xml = S.scene_xml([S.object_xml("obj", model_dir, ob, 0.0, pos, Rf)], cam_pos=cam)
         m = mujoco.MjModel.from_xml_string(xml)
         d = mujoco.MjData(m)
         mujoco.mj_forward(m, d)
@@ -84,9 +85,9 @@ def render_one(args):
             r.enable_depth_rendering()
             r.update_scene(d, camera="overhead", scene_option=opt)
             depth = r.render().copy()
-        cam = m.camera("overhead")
-        x_cam, y_cam = d.cam_xmat[cam.id].reshape(3, 3)[:, 0], d.cam_xmat[cam.id].reshape(3, 3)[:, 1]
-        R_wc, p_wc = S.R_world_cv(x_cam, y_cam), d.cam_xpos[cam.id].copy()
+        cid = m.camera("overhead").id
+        x_cam, y_cam = d.cam_xmat[cid].reshape(3, 3)[:, 0], d.cam_xmat[cid].reshape(3, 3)[:, 1]
+        R_wc, p_wc = S.R_world_cv(x_cam, y_cam), d.cam_xpos[cid].copy()
         K = S.camera_K()
         pts = S.backproject(depth, K)
         wide, tight = S.workspace_masks(pts @ R_wc.T + p_wc)
@@ -106,7 +107,7 @@ def render(a):
     for sub in ("scenes", "rgb"):
         os.makedirs(os.path.join(a.out, sub), exist_ok=True)
     with Pool(min(64, len(names))) as pool:
-        rows = [r for rs in pool.map(render_one, [(n, a.out) for n in names]) for r in rs]
+        rows = [r for rs in pool.map(render_one, [(n, a.out, a.cam_tilt) for n in names]) for r in rs]
     json.dump(rows, open(os.path.join(a.out, "render.json"), "w"), indent=1)
     for r in rows:
         if r["status"] != "ok":
@@ -161,5 +162,7 @@ if __name__ == "__main__":
     ap.add_argument("--min-grasps", type=int, default=3)
     ap.add_argument("--detector", default="gsnet", choices=["gsnet", "baseline"])
     ap.add_argument("--max-deg", type=float, default=30.0, help="D3 limit on the approach angle")
+    ap.add_argument("--cam-tilt", type=float, default=float(np.degrees(np.arctan2(0.25, 0.60))),
+                    help="camera angle off vertical [deg] (render)")
     a = ap.parse_args()
     render(a) if a.cmd == "render" else evaluate(a)

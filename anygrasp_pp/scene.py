@@ -20,7 +20,16 @@ PICK = np.array([0.50, 0.0, TABLE_Z])     # centre of the pick area [m]
 CAM_W, CAM_H = 1280, 720                  # RealSense D435 depth stream used by GraspNet-1Billion
 CAM_FY = 927.37                           # GraspNet-1Billion RealSense intrinsics, fy [px]
 CAM_FOVY = float(np.degrees(2 * np.arctan(CAM_H / 2 / CAM_FY)))
-CAM_POS = PICK + np.array([0.25, 0.0, 0.60])   # 0.65 m from the pick area, 22.6 deg off vertical, facing the robot
+CAM_DIST = 0.65                           # camera to pick-area centre [m]
+
+
+def camera_position(tilt_deg, dist=CAM_DIST, pick=PICK):
+    """Camera on the far side of the pick area from the robot, tilt_deg off vertical, looking at the pick centre."""
+    t = np.radians(tilt_deg)
+    return pick + dist * np.array([np.sin(t), 0.0, np.cos(t)])
+
+
+CAM_POS = camera_position(np.degrees(np.arctan2(0.25, 0.60)))   # 22.6 deg off vertical: (0.25, 0, 0.60) from PICK
 CROP = 0.30                               # half side of the square workspace crop around PICK [m]
 
 
@@ -29,6 +38,8 @@ def look_at(pos, target, up=(0.0, 0.0, 1.0)):
     f = np.asarray(target, float) - pos
     f /= np.linalg.norm(f)
     x = np.cross(f, up)
+    if np.linalg.norm(x) < 1e-9:          # looking straight down: let the image's up point toward the robot (-x)
+        x = np.cross(f, (-1.0, 0.0, 0.0))
     x /= np.linalg.norm(x)
     y = np.cross(-f, x)                   # y_cam = z_cam x x_cam with z_cam = -f
     return x, y
