@@ -598,5 +598,44 @@ m_in, m_edge, m_out = (SC._support_margin(sq, np.array(q)) for q in ([0.03, 0.05
 check("I.3", "num", abs(m_in - 0.03) < 1e-12 and abs(m_edge) < 1e-12 and abs(m_out + 0.03) < 1e-12,
       "support margin of a 10 cm square: 3 cm inside, 0 on the edge, -3 cm outside")
 
+Kc = SC.camera_K()
+fb_ = Kc[0, 0] * SC.STEREO_BASELINE
+sig_ok, sig_txt = True, []
+for zz in (0.40, 0.65, 1.00):
+    plane = np.full((200, 400), zz)
+    zn = SC.realsense_depth(plane, plane, Kc, np.random.default_rng(3), unit=1e-9, edge_drop=0.0)
+    vals = zn[zn > 0].astype(np.float64)
+    pred = zz ** 2 * SC.SUBPIXEL_RMS / fb_
+    sig_ok &= abs(vals.std() / pred - 1) < 0.03
+    sig_txt.append(f"{zz:.2f} m: {vals.std() * 1e3:.3f}/{pred * 1e3:.3f} mm")
+check("I.4", "num", sig_ok, "depth noise sigma_z = z^2 sigma_d/(f b), Monte Carlo/formula: " + "; ".join(sig_txt))
+plane = np.full((50, 400), 0.65)
+band = (SC.stereo_shadow(plane, plane, Kc) .all(0)).sum()
+check("I.4", "num", abs(band - fb_ / 0.65) <= 1, f"invalid band at the left edge: {band} columns (f b / z = {fb_ / 0.65:.1f})")
+
+ztop_h = 0.10
+xml_st = SC.scene_xml([], cam_pos=SC.camera_position(0.0)).replace(
+    "</worldbody>", f'<geom type="box" size="0.05 0.08 {ztop_h / 2}" pos="{SC.PICK[0]} 0 {ztop_h / 2}"/></worldbody>')
+ms = mujoco.MjModel.from_xml_string(xml_st)
+ds = mujoco.MjData(ms)
+mujoco.mj_forward(ms, ds)
+with mujoco.Renderer(ms, SC.CAM_H, SC.CAM_W) as rr:
+    rr.enable_depth_rendering()
+    rr.update_scene(ds, camera="overhead", scene_option=optc)
+    dl = rr.render().copy()
+    rr.update_scene(ds, camera="overhead_right", scene_option=optc)
+    dr = rr.render().copy()
+sh = SC.stereo_shadow(dl, dr, Kc)
+rows = np.arange(SC.CAM_H // 2 - 40, SC.CAM_H // 2 + 40)                 # rows through the box
+band0 = int(np.ceil(fb_ / dl.max())) + 2
+width = sh[rows][:, band0:].sum(1)
+z1, z2 = SC.CAM_DIST - ztop_h, SC.CAM_DIST
+want_w = fb_ * (1 / z1 - 1 / z2)
+box_rows = np.abs(np.arange(SC.CAM_H) - Kc[1, 2]) <= Kc[1, 1] * 0.05 / z1 + 2      # image rows the box covers
+stray = int(sh[~box_rows][:, band0:].sum())
+check("I.4", "mj", np.abs(width - want_w).max() <= 1.5 and stray == 0,
+      f"shadow strip behind a 10 cm box: {width.min()}-{width.max()} px wide (f b (1/z1 - 1/z2) = {want_w:.1f} px); "
+      f"{stray} false holes on the open table")
+
 print(f"\n{sum(results)}/{len(results)} checks passed")
 sys.exit(0 if all(results) else 1)

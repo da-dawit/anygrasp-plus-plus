@@ -68,6 +68,49 @@ def backproject(depth, K, max_depth=2.0):
     return np.stack([(u[ok] - K[0, 2]) * z / K[0, 0], (v[ok] - K[1, 2]) * z / K[1, 1], z], 1)
 
 
+# ----------------------------------------------------------------------------- RealSense D435 depth model (I.4)
+STEREO_BASELINE = 0.050   # m, D435 left-right imager baseline
+SUBPIXEL_RMS = 0.08       # px, Intel's typical D435 disparity (subpixel) RMS
+DEPTH_UNIT = 0.001        # m, z16 depth units (GraspNet-1Billion factor_depth = 1000)
+EDGE_JUMP = 0.015         # m, depth jump inside a 3x3 window that marks an edge pixel
+EDGE_DROP = 0.5           # probability an edge pixel is invalid
+
+
+def stereo_shadow(depth_left, depth_right, K, baseline=STEREO_BASELINE, tol=0.003):
+    """Pixels of the left image whose surface point the right imager cannot see (I.4). Rectified pair: the right
+    camera is the left one moved by `baseline` along x_cam, so a left pixel (u, v) at depth z appears at
+    (u - f b / z, v) in the right image; it is occluded there if the right image sees something nearer."""
+    h, w = depth_left.shape
+    f = K[0, 0]
+    v, u = np.mgrid[0:h, 0:w]
+    z = depth_left
+    ok = z > 0
+    ur = np.round(u - f * baseline / np.where(ok, z, np.inf)).astype(int)
+    inside = ok & (ur >= 0) & (ur < w)
+    zr = np.where(inside, depth_right[v, np.clip(ur, 0, w - 1)], np.inf)
+    return ok & (~inside | (zr < z - tol))
+
+
+def realsense_depth(depth_left, depth_right, K, rng, baseline=STEREO_BASELINE, sigma_d=SUBPIXEL_RMS,
+                    unit=DEPTH_UNIT, edge_jump=EDGE_JUMP, edge_drop=EDGE_DROP):
+    """Ideal planar depth -> what a D435 would report (I.4): stereo shadows become holes, disparity d = f b / z
+    gets N(0, sigma_d^2) noise, pixels at depth edges drop out with probability edge_drop, and depth is
+    quantized to `unit`. Invalid pixels are 0, as on the sensor."""
+    z = depth_left.astype(np.float64).copy()
+    ok = z > 0
+    fb = K[0, 0] * baseline
+    hole = stereo_shadow(depth_left, depth_right, K, baseline)
+    d = np.where(ok, fb / np.where(ok, z, 1.0), 0.0) + rng.normal(0.0, sigma_d, z.shape)
+    z = np.where(ok & (d > 0), fb / np.where(d > 0, d, 1.0), 0.0)
+    pad = np.pad(depth_left, 1, mode="edge")
+    win = np.stack([pad[i:i + z.shape[0], j:j + z.shape[1]] for i in range(3) for j in range(3)])
+    edge = (win.max(0) - win.min(0)) > edge_jump
+    drop = edge & (rng.random(z.shape) < edge_drop)
+    z = np.round(z / unit) * unit
+    z[hole | drop | ~ok] = 0.0
+    return z.astype(np.float32)
+
+
 def workspace_masks(world_pts, above=0.01, margin=0.02, crop=CROP, pick=PICK, table_z=TABLE_Z):
     """(wide, tight) masks over world points, the way GraspNet-1Billion feeds its detectors without an oracle.
     wide:  the square pick area (for the collision check: table and surroundings included)
@@ -106,7 +149,7 @@ def object_xml(tag, model_dir, ob, shift, pos, R, collision="vhacd", mu=MU, pads
     pos, R: pose of the mesh frame in the world. The inertial is explicit (H.3), so geoms carry no mass."""
     p = ob["props"][shift]
     I = p["inertia"]
-    coll_dir = model_dir if collision == "vhacd" else os.path.join(model_dir, collision)
+    coll_dir = O.collision_dir(model_dir, collision)
     pieces = sorted((f for f in os.listdir(coll_dir) if f.startswith("model_collision_") and f.endswith(".obj")),
                     key=lambda f: int(f.rsplit("_", 1)[1].split(".")[0]))
     assets = [f'<texture type="2d" name="{tag}_tex" file="{os.path.join(model_dir, "texture.png")}"/>',
@@ -132,6 +175,7 @@ def object_xml(tag, model_dir, ob, shift, pos, R, collision="vhacd", mu=MU, pads
 
 def scene_xml(object_snippets, timestep=0.002, impratio=10, contact=CONTACT, cam_pos=CAM_POS, cam_target=PICK):
     x, y = look_at(cam_pos, cam_target)
+    cr = np.asarray(cam_pos) + STEREO_BASELINE * x          # the D435's right imager (I.4)
     assets = "\n".join(a for a, _ in object_snippets)
     bodies = "\n".join(b for _, b in object_snippets)
     return f"""
@@ -150,6 +194,8 @@ def scene_xml(object_snippets, timestep=0.002, impratio=10, contact=CONTACT, cam
     <light pos="0.5 0.5 1.5" dir="0 -0.3 -1" directional="true" diffuse="0.3 0.3 0.3"/>
     <geom name="table" type="plane" size="1.2 1.2 0.01" pos="0 0 {TABLE_Z}" material="table"/>
     <camera name="overhead" pos="{cam_pos[0]:.6f} {cam_pos[1]:.6f} {cam_pos[2]:.6f}"
+            xyaxes="{x[0]:.9f} {x[1]:.9f} {x[2]:.9f} {y[0]:.9f} {y[1]:.9f} {y[2]:.9f}" fovy="{CAM_FOVY:.9f}"/>
+    <camera name="overhead_right" pos="{cr[0]:.6f} {cr[1]:.6f} {cr[2]:.6f}"
             xyaxes="{x[0]:.9f} {x[1]:.9f} {x[2]:.9f} {y[0]:.9f} {y[1]:.9f} {y[2]:.9f}" fovy="{CAM_FOVY:.9f}"/>
 {bodies}
   </worldbody>

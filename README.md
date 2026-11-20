@@ -15,7 +15,7 @@ Everything runs in MuJoCo with a Franka Panda.
 | Step | What | State |
 |---|---|---|
 | 1 | Contact calibration: gripper, fingertip and contact model checked against the slip physics | done |
-| 2 | Full arm, table, bin, camera, hidden-weight objects | in progress: hidden-weight objects, camera and object selection done (D15, D16); object set to settle |
+| 2 | Full arm, table, bin, camera, hidden-weight objects | in progress: 10 hidden-weight objects, D435 camera model done (D15-D17); arm, bin and B0 next |
 | 3 | GSNet detector (cached per scene) and baseline B0 | detectors running and checked (D14); B0 next |
 | 4 | M1–M3 and the B0 + blind-retry control | |
 | 5 | Stress tests and evaluation | |
@@ -33,10 +33,13 @@ scripts/
   calibrate_contact.py    step 1 sweeps and the parameter check (appendix R.1, R.2)
   characterize_contact.py non-ideal grasps: yaw, offsets, curvature, tilt, lift speed (R.3)
   panda_m3_numbers.py     test-lift accuracy and tare numbers from the real Panda arm (E.2, E.5)
-  check_derivations.py    independent checks of every derivation (78 checks)
+  check_derivations.py    independent checks of every derivation (81 checks)
   select_objects.py       object selection over all 1030 scanned objects (D16)
   render_candidates.py    contact sheet of candidate objects (needs a GL context, e.g. MUJOCO_GL=egl)
-  graspability_test.py    resting pose, overhead render and detector test per candidate (D16)
+  graspability_test.py    resting pose, overhead render (D435 depth model) and detector test per candidate (D16)
+  convert_ycb.py          YCB scans into the same layout as the scanned-objects library
+  make_collision.py       CoACD collision pieces, the same settings for every object
+  final_set.py            the study's object set from the test results (results/objects/final_set.csv)
   setup_assets.sh         downloads the robot model; verifies the detector weights
 gpu/                      runs on a rented Linux GPU, not on the Mac
   setup_gpu.sh            pinned detector environment (full build, or reuse saved wheels)
@@ -81,7 +84,7 @@ The saved wheels run on RTX 30xx/40xx, A-series, A100 and L4/L40 cards (sm_80/86
 ## Reproduce step 1
 
 ```bash
-python scripts/check_derivations.py       # ~5 min, expects 78/78
+python scripts/check_derivations.py       # ~5 min, expects 81/81
 python scripts/panda_m3_numbers.py        # seconds
 python scripts/calibrate_contact.py       # ~15 min
 python scripts/characterize_contact.py --contact rubber   # ~15 min
@@ -93,5 +96,7 @@ cd docs && tectonic -X compile derivations.tex
 
 - MuJoCo Menagerie (Franka models): Apache-2.0, downloaded by the setup script.
 - Google Scanned Objects (Downs et al., ICRA 2022): CC-BY 4.0; MuJoCo models by K. Zakka (github.com/kevinzakka/mujoco_scanned_objects, MIT). Not stored here; the scripts read them from a clone.
+- YCB object and model set (Calli et al., 2015): CC-BY 4.0, downloaded from the YCB site's google_16k scans.
+- CoACD (Wei et al., SIGGRAPH 2022): MIT, used to make collision pieces.
 - GSNet and graspnet-baseline: academic or non-profit noncommercial research use only. They are used, not redistributed (sources are cloned at pinned commits by `gpu/setup_gpu.sh`; weights and compiled wheels stay out of git).
 - MinkowskiEngine (GSNet authors' fork) and graspnetAPI: MIT.

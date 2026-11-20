@@ -15,6 +15,7 @@ import csv
 import json
 import os
 import sys
+import zlib
 from multiprocessing import Pool
 
 import numpy as np
@@ -23,7 +24,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from anygrasp_pp import objects as O  # noqa: E402
 from anygrasp_pp import scene as S  # noqa: E402
 
-MODELS = os.environ.get("GSO_MODELS", "/root/src/mujoco_scanned_objects/models")
 YAWS = (0, 90, 180, 270)
 SETTLE_T = 1.0
 MAX_WIDTH = 0.08
@@ -41,9 +41,9 @@ def place(ob, pose, yaw_deg):
     return pos, Rf
 
 
-def settle(model_dir, ob, pos, Rf, shift):
+def settle(model_dir, ob, pos, Rf, shift, collision):
     import mujoco
-    xml = S.scene_xml([S.object_xml("obj", model_dir, ob, shift, pos, Rf)])
+    xml = S.scene_xml([S.object_xml("obj", model_dir, ob, shift, pos, Rf, collision=collision)])
     m = mujoco.MjModel.from_xml_string(xml)
     d = mujoco.MjData(m)
     mujoco.mj_forward(m, d)
@@ -57,11 +57,11 @@ def settle(model_dir, ob, pos, Rf, shift):
 
 
 def render_one(args):
-    name, out, tilt = args
+    name, out, tilt, models, collision, noise = args
     cam = S.camera_position(tilt)
     import mujoco
-    model_dir = os.path.join(MODELS, name)
-    ob = O.build(model_dir)
+    model_dir = os.path.join(models, name)
+    ob = O.build(model_dir, collision=collision)
     rec = dict(name=name, parts=ob["parts"], feasible=ob["core"] is not None)
     if ob["core"] is None:
         return [dict(rec, status="no core")]
@@ -72,8 +72,8 @@ def render_one(args):
     rows = []
     for yaw in YAWS:
         pos, Rf = place(ob, pose, yaw)
-        moves = {s: settle(model_dir, ob, pos, Rf, s) for s in (0.0, max(O.SHIFTS))}
-        xml = S.scene_xml([S.object_xml("obj", model_dir, ob, 0.0, pos, Rf)], cam_pos=cam)
+        moves = {s: settle(model_dir, ob, pos, Rf, s, collision) for s in (0.0, max(O.SHIFTS))}
+        xml = S.scene_xml([S.object_xml("obj", model_dir, ob, 0.0, pos, Rf, collision=collision)], cam_pos=cam)
         m = mujoco.MjModel.from_xml_string(xml)
         d = mujoco.MjData(m)
         mujoco.mj_forward(m, d)
@@ -85,10 +85,16 @@ def render_one(args):
             r.enable_depth_rendering()
             r.update_scene(d, camera="overhead", scene_option=opt)
             depth = r.render().copy()
+            if noise:
+                r.update_scene(d, camera="overhead_right", scene_option=opt)
+                depth_r = r.render().copy()
         cid = m.camera("overhead").id
         x_cam, y_cam = d.cam_xmat[cid].reshape(3, 3)[:, 0], d.cam_xmat[cid].reshape(3, 3)[:, 1]
         R_wc, p_wc = S.R_world_cv(x_cam, y_cam), d.cam_xpos[cid].copy()
         K = S.camera_K()
+        if noise:   # seeded per scene, so a rerun gives the same noisy image
+            rng = np.random.default_rng(zlib.crc32(f"{name}|{yaw}".encode()))
+            depth = S.realsense_depth(depth, depth_r, K, rng)
         pts = S.backproject(depth, K)
         wide, tight = S.workspace_masks(pts @ R_wc.T + p_wc)
         tag = f"{name}__yaw{yaw:03d}"
@@ -107,7 +113,7 @@ def render(a):
     for sub in ("scenes", "rgb"):
         os.makedirs(os.path.join(a.out, sub), exist_ok=True)
     with Pool(min(64, len(names))) as pool:
-        rows = [r for rs in pool.map(render_one, [(n, a.out, a.cam_tilt) for n in names]) for r in rs]
+        rows = [r for rs in pool.map(render_one, [(n, a.out, a.cam_tilt, a.models, a.collision, not a.no_noise) for n in names]) for r in rs]
     json.dump(rows, open(os.path.join(a.out, "render.json"), "w"), indent=1)
     for r in rows:
         if r["status"] != "ok":
@@ -158,6 +164,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["render", "evaluate"])
     ap.add_argument("--names")
+    ap.add_argument("--models", default="/root/src/mujoco_scanned_objects/models")
+    ap.add_argument("--collision", default="vhacd", help="convex pieces: vhacd (as scanned) or coacd")
+    ap.add_argument("--no-noise", action="store_true", help="ideal depth instead of the D435 model (I.4)")
     ap.add_argument("--out", default="results/objects/gtest")
     ap.add_argument("--min-grasps", type=int, default=3)
     ap.add_argument("--detector", default="gsnet", choices=["gsnet", "baseline"])

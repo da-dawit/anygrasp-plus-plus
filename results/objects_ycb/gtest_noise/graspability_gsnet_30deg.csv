@@ -1,0 +1,5 @@
+name,yaws,min_ok,median_ok,max_settle_mm,passes
+035_power_drill,4,1,1.5,3.0243874540964875,True
+048_hammer,4,2,4.5,0.9862932095713656,True
+072-a_toy_airplane,4,6,8.5,1.7151859193048404,True
+073-g_lego_duplo,4,4,4.5,1.2623959370953635,True

@@ -24,9 +24,10 @@ assets/gpu_wheels/
 results/detector/example_grasps.png
 
 # graspability-test intermediates (regenerable, ~100 MB)
-results/objects/gtest*/scenes/
-results/objects/gtest*/rgb/
-results/objects/gtest*/cache/
+results/objects*/gtest*/scenes/
+results/objects*/gtest*/rgb/
+results/objects*/gtest*/cache/
+results/objects*/gtest*/eval_print.txt
 
 # MuJoCo warning log
 MUJOCO_LOG.TXT

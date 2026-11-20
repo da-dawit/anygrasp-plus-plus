@@ -1,0 +1,15 @@
+name,yaws,min_ok,median_ok,max_settle_mm,passes
+Cole_Hardware_Hammer_Black,4,0,0.0,1.6458164131046136,False
+Ecoforms_Plant_Container_QP6HARVEST,4,0,0.0,3.0614457096774617,False
+Elephant,4,1,5.0,0.17654582738555852,True
+HeavyDuty_Flashlight,4,0,0.0,2.219960865527263,False
+Leap_Frog_Paint_Dabber_Dot_Art_5_paint_bottles,4,0,0.0,0.2811635631456675,False
+MINI_EXCAVATOR,4,7,8.0,0.61340893416106,True
+Ocedar_Snap_On_Dust_Pan_And_Brush_1_ct,4,0,0.5,35.13953914654856,False
+Racoon,4,0,2.5,0.2004670467904959,False
+Shark,4,2,4.0,0.1620162369200178,True
+SpiderMan_Titan_Hero_12Inch_Action_Figure_5Hnn4mtkFsP,4,15,18.5,95.18357063600382,False
+SpiderMan_Titan_Hero_12Inch_Action_Figure_oo1qph4wwiW,4,5,8.0,1.2690640741542347,True
+Thomas_Friends_Wooden_Railway_Ascending_Track_Riser_Pack,0,0,0.0,nan,False
+Thomas_Friends_Wooden_Railway_Deluxe_Track_Accessory_Pack,4,4,5.5,0.3159033164278207,True
+Victor_Reversible_Bookend,4,7,8.5,0.287324637957355,True

@@ -31,8 +31,14 @@ def read_obj_vertices(path):
     return np.asarray(v, dtype=float)
 
 
-def convex_pieces(model_dir):
-    paths = sorted(glob.glob(os.path.join(model_dir, "model_collision_*.obj")),
+def collision_dir(model_dir, collision="vhacd"):
+    """Folder with the convex pieces: the scan's own V-HACD pieces, or a regenerated set (e.g. "coacd")."""
+    return model_dir if collision == "vhacd" else os.path.join(model_dir, collision)
+
+
+def convex_pieces(model_dir, collision="vhacd"):
+    d = collision_dir(model_dir, collision)
+    paths = sorted(glob.glob(os.path.join(d, "model_collision_*.obj")),
                    key=lambda p: int(p.rsplit("_", 1)[1].split(".")[0]))
     return [read_obj_vertices(p) for p in paths]
 
@@ -142,9 +148,9 @@ def parts(occ, bridge=1, min_frac=0.02):
     return int((sizes >= min_frac * occ.sum()).sum())
 
 
-def build(model_dir, voxel=VOXEL, wall=WALL):
+def build(model_dir, voxel=VOXEL, wall=WALL, collision="vhacd"):
     """Everything about one object: solid voxels, principal frame, heavy-end core, properties per shift."""
-    occ, origin = occupancy(convex_pieces(model_dir), voxel)
+    occ, origin = occupancy(convex_pieces(model_dir, collision), voxel)
     idx = np.argwhere(occ)
     points = origin + voxel * idx
     c, axes = principal_frame(points)

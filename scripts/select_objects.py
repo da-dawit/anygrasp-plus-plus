@@ -80,11 +80,12 @@ def stage1_one(path):
         return dict(name=name, error=repr(e)[:120])
 
 
-def stage2_one(model_dir):
+def stage2_one(args):
     from anygrasp_pp import objects as O
+    model_dir, collision = args
     name = os.path.basename(model_dir)
     try:
-        ob = O.build(model_dir)
+        ob = O.build(model_dir, collision=collision)
         local = (ob["points"] - ob["centroid"]) @ ob["axes"].T
         mesh = trimesh.load(os.path.join(model_dir, "model.obj"), force="mesh", process=True)
         r = dict(name=name, L=ob["length"], grasp_len=graspable_length(local), volume_cm3=ob["volume"] * 1e6,
@@ -115,6 +116,9 @@ def main():
     ap.add_argument("--models", required=True)
     ap.add_argument("--out", default="results/objects")
     ap.add_argument("--jobs", type=int, default=64)
+    ap.add_argument("--collision", default="vhacd", help="convex pieces to use: vhacd (as scanned) or coacd")
+    ap.add_argument("--candidates", default="candidates.txt", help="stage 2 input list (in --out)")
+    ap.add_argument("--suffix", default="", help="stage 2 output name suffix, e.g. _coacd")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     if a.stage == 1:
@@ -129,13 +133,14 @@ def main():
         print(f"stage 1: {len(rows)} objects, {sum(1 for r in rows if r['error'])} failed to load, "
               f"{len(cand)} candidates")
         return
-    names = [n.strip() for n in open(os.path.join(a.out, "candidates.txt")) if n.strip()]
+    names = [n.strip() for n in open(os.path.join(a.out, a.candidates)) if n.strip()]
     with Pool(a.jobs) as pool:
-        rows = pool.map(stage2_one, [os.path.join(a.models, n) for n in names], chunksize=1)
-    write_csv(os.path.join(a.out, "solid_survey.csv"), rows,
+        rows = pool.map(stage2_one, [(os.path.join(a.models, n), a.collision) for n in names], chunksize=1)
+    write_csv(os.path.join(a.out, f"solid_survey{a.suffix}.csv"), rows,
               ["name", "L", "grasp_len", "volume_cm3", "parts", "feasible", "core_len", "core_density_8",
                "shell_mass_8", "shift_err", "bulge95", "bulge_max", "gap95", "gap_max", "error"])
-    excl = {r["name"]: r["reason"] for r in csv.DictReader(open(os.path.join(a.out, "exclusions.csv")))}
+    ex_path = os.path.join(a.out, "exclusions.csv")
+    excl = {r["name"]: r["reason"] for r in csv.DictReader(open(ex_path))} if os.path.exists(ex_path) else {}
     ok = [r for r in rows if not r["error"]]
     steps = [("core feasible", lambda r: r["feasible"]),
              (f">= {MIN_GRASP_LEN * 100:.0f} cm graspable", lambda r: r["grasp_len"] >= MIN_GRASP_LEN),
@@ -146,7 +151,7 @@ def main():
     for label, keep in steps:
         ok = [r for r in ok if keep(r)]
         print(f"  {label:32s} {len(ok):4d}")
-    open(os.path.join(a.out, "stage2_shortlist.txt"), "w").write("\n".join(sorted(r["name"] for r in ok)) + "\n")
+    open(os.path.join(a.out, f"stage2_shortlist{a.suffix}.txt"), "w").write("\n".join(sorted(r["name"] for r in ok)) + "\n")
 
 
 if __name__ == "__main__":

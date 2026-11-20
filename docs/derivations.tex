@@ -626,6 +626,23 @@ in the OpenCV camera frame ($x$ right, $y$ down, $z$ forward). The world point i
 A resting pose is used only if $\delta\ge5$\,mm at every shift (the hidden core moves the CoM), and the object then has to stay within a few millimetres when simulated for 1\,s at the shifts 0 and 8\,cm.
 \meta{I.3 [num] (a square support: inside, on the edge, outside)}{scene.rest\_poses}
 
+\subsection{What a RealSense D435 reports (the depth model)}
+The detectors were trained on real D435 depth, so the simulated image gets the D435's main artifacts. The D435 measures depth by active stereo between two infrared imagers a baseline $b = 50$\,mm apart, and reports depth for the left imager in 1\,mm units.
+
+\textbf{Claim 1 (noise grows as $z^2$).} With disparity $\delta = fb/z$ (pixels) measured with error of RMS $\sigma_\delta$ (Intel's typical subpixel figure, 0.08\,px), the depth error has, to first order,
+\begin{equation}\label{eq:rsnoise}
+\sigma_z = \frac{z^2\,\sigma_\delta}{f\,b}.
+\end{equation}
+\textbf{Derivation.} $z = fb/\delta$, so $dz/d\delta = -fb/\delta^2 = -z^2/(fb)$; a small error $\epsilon$ in $\delta$ moves $z$ by $-z^2\epsilon/(fb)$, whose RMS is \eqref{eq:rsnoise}. \hfill $\square$
+At the pick area ($z\approx0.65$\,m, $f = 927$\,px) this is 0.73\,mm, about the same as the 1\,mm depth unit.
+
+\textbf{Claim 2 (stereo shadows).} The right imager is the left one moved by $b$ along $\bm x_{\text{cam}}$ (rectified pair). A left pixel $(u, v)$ at depth $z$ appears at $(u - fb/z,\ v)$ in the right image. It gets no depth if that position is outside the right image, or if the right image sees a nearer surface there. Consequences: a band of $fb/z$ columns at the left edge is always invalid, as on the real sensor, and behind a step from depth $z_1$ (near) to $z_2$ (far) a strip $fb\,(1/z_1 - 1/z_2)$ pixels wide is invalid.
+
+\textbf{Derivation.} A point $(X, Y, Z)$ in the left OpenCV frame is $(X - b, Y, Z)$ in the right one, so $u_r = f(X-b)/Z + c_x = u - fb/Z$ and $v_r = v$. At a step, the far surface reappears in the right image only past the near edge's position there: the near edge sits at $u_e - fb/z_1$, and a far pixel $u$ maps to $u - fb/z_2$. The far pixels with $u - fb/z_2 < u_e - fb/z_1$ but $u > u_e$ are hidden, a strip of width $fb/z_1 - fb/z_2$. \hfill $\square$
+
+\textbf{Also modelled:} pixels with a depth jump of more than 1.5\,cm inside their $3\times3$ neighbourhood are invalid with probability 0.5 (real stereo matching fails at edges), and the reported depth is rounded to 1\,mm. The noise is seeded per scene, so the same scene always gives the same image.
+\meta{I.4 [num] ($\sigma_z$ by Monte Carlo at three depths; left band width), [mj] (the shadow strip behind a rendered box)}{scene.realsense\_depth, scene.stereo\_shadow}
+
 % =====================================================================
 \appendix
 \renewcommand{\thesection}{R}

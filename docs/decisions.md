@@ -19,7 +19,8 @@ Every change from the proposal (`proposal/proposal_final.tex`), with the reason 
 | D13 | New control "B0 + blind retry" (professor's required change) | 2026-11-20 |
 | D14 | Detector runs: pinned GPU environment, cached once per scene; Panda width rule | 2026-11-20 |
 | D15 | Hidden-weight objects weigh 1.0 kg (was 0.6 kg) | 2026-11-20 |
-| D16 | Hidden weight is a dense core in the object's heavy end; object selection from all 1030 scans | 2026-11-20 |
+| D16 | Hidden weight is a dense core in the object's heavy end; 10 objects from 1108 scans (GSO + YCB) | 2026-11-20 |
+| D17 | Simulated depth follows a RealSense D435 (stereo noise, shadows, edge dropout, 1 mm units) | 2026-11-20 |
 
 ---
 
@@ -249,6 +250,32 @@ Relaxing the length to 15 cm or the shell to 50 g adds no objects; the 8 cm shif
 
 - **Camera angle is not the cause.** With the camera straight down (the GSNet authors' real-robot setup) instead of 22.6° off vertical, the passing objects get more usable grasps (the elephant at least 9 per yaw instead of 4), but the same objects fail. At 30° GSNet passes 5 and the baseline 6 (`results/objects/gtest_tilt0/`).
 
-**Open (decided with the user next):** the realistic GSO set cannot supply 20 hidden-weight objects that the detector grasps reliably from above. The options are to relax D3, to add objects from another scanned set, or to run fewer objects with more seeds. Collision geometry (below) and the camera noise model (proposal L7) may also change GSNet's grasps, since it was trained on real, noisy depth.
+**Decision (2026-11-20): add the YCB set and keep every rule.** I added the YCB objects (Calli et al. 2015, CC-BY 4.0; 78 with textured scans) to make the benchmark as realistic as possible. Both libraries go through the same rules, unchanged: stage 1 gives 12 YCB candidates, the core and one-piece checks leave 4. All objects then get CoACD collision pieces (below) and the D435 depth model (D17).
 
-**Collision fidelity:** the scans' V-HACD collision pieces bulge a median 6.7 mm (95th percentile) beyond the visible surface, enough to put the fingers on material the camera cannot see. The chosen objects get new collision pieces from CoACD (named in the proposal), checked with the same bulge/gap measure (`objects.fidelity`).
+**Final set: every object that passes every check, 10 in all** (`results/objects/final_set.csv`, built by `scripts/final_set.py`). It must be stable at every shift, and with the D435 depth model GSNet must give at least one usable top-down grasp at every yaw:
+
+- YCB: hammer, power drill, toy airplane, Duplo brick.
+- Scanned: bookend, excavator toy, action figure, elephant figure, shark toy, wooden track piece.
+
+The depth model is what admits the YCB hammer and drill: with ideal depth GSNet gives them no usable grasp at some yaw. That is the proposal's risk 2 (odd grasps on simulated depth) and its mitigation, now measured.
+
+**Why 10 and not 20.** Padding the set with objects that fail these checks would make B0 fail for reasons that have nothing to do with the CoM: no top-down grasp, an unstable pose, or a physically impossible core. The funnel from 1108 scans to 10 objects is itself a result for the report. Trials keep the midpoint size: 10 objects × 5 shifts × 6 seeds = 300 B0 trials (the proposal had 20 × 5 × 3). Statistics are clustered by object (D10), now over 10 clusters, so the object-level intervals are wider; this is reported as such. Objects that pass with a shift capped below 8 cm (mustard bottle 7.1 cm, spatula 7.3 cm) are candidates for the Target tier only after their own graspability test.
+
+**Usable-grasp threshold.** At least 1 per yaw: B0 needs one grasp to execute. A three-grasp requirement would keep 6 of the 10.
+
+**Collision fidelity:** the scans' V-HACD collision pieces bulge a median 6.7 mm (95th percentile) beyond the visible surface, enough to put the fingers on material the camera cannot see. Every finalist and every YCB candidate gets new pieces from CoACD (`scripts/make_collision.py`, the same settings for all, concavity threshold 0.04). For the final objects the 95th-percentile bulge drops to 1.8–4.8 mm (V-HACD 5.7–28.2 mm on the scanned ones). The 2 mm voxel and the surface sampling set a floor of about 2–3 mm on this measure.
+
+## D17. Simulated depth follows a RealSense D435
+
+**Why:** both detectors were trained on real D435 depth (GraspNet-1Billion), and the proposal calls for a depth camera with a sim-to-real noise model. Ideal rendered depth gave GSNet no usable top-down grasp at some yaw on the YCB hammer and power drill (D16).
+
+**Model** (`scene.realsense_depth`, derivations I.4), from how the sensor works (active stereo, 50 mm baseline, depth reported for the left imager):
+
+1. Disparity noise of 0.08 px RMS (Intel's typical subpixel figure), so depth error grows as z²: 0.73 mm at the pick area.
+2. Stereo shadows: pixels the right imager cannot see get no depth. These are found by rendering the right imager, which also gives the real sensor's invalid band at the left image edge.
+3. Pixels at depth jumps over 1.5 cm are invalid with probability 0.5.
+4. Depth rounded to 1 mm, the sensor's (and GraspNet's) depth unit.
+
+The noise is seeded per scene. Checks: σ_z matches z²σ_d/(fb) by Monte Carlo within 0.4%; the left band is 71 columns (71.3 predicted); the shadow strip behind a 10 cm box is 13 px (13.0 predicted) with no false holes on the open table.
+
+**Effect:** with the model on, the YCB hammer and drill get usable grasps at every yaw. On the scanned objects the same 6 pass either way.
