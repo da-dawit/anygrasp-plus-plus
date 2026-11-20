@@ -123,7 +123,7 @@ def scene_one(args):
 
 
 # ----------------------------------------------------------------------------- B0 grasp choice
-def choose_grasp(m, arm, scene, cache):
+def choose_grasp(m, arm, scene, cache, skip=0):
     """B0: in the detector's order (collision-free, NMS, best score first), the first grasp that passes D3 and
     D14, sits on the object, and has IK solutions for pre-grasp, grasp, lift and above-bin. Both closing
     directions of a grasp are tried (the hand is symmetric)."""
@@ -137,7 +137,10 @@ def choose_grasp(m, arm, scene, cache):
         if not ok[i]:
             continue
         tried += 1
+        skip_before = skip
         for flip in (False, True):
+            if skip != skip_before:       # this grasp was reachable and skipped: move to the next grasp
+                break
             R = Rw[i].copy()
             if flip:                       # 180 deg about the approach axis
                 R[:, 1:] *= -1
@@ -152,6 +155,9 @@ def choose_grasp(m, arm, scene, cache):
                 c_, s_ = np.cos(np.radians(yaw)), np.sin(np.radians(yaw))
                 R_b = np.array([[c_, -s_, 0], [s_, c_, 0], [0, 0, 1.0]]) @ R_g
                 q_b, ok4, _, _ = arm.ik(dk, S.BIN_CENTER + [0, 0, BIN_ABOVE], R_b, q_l)
+                if ok4 and skip > 0:      # a reachable grasp, but the caller wants a later one
+                    skip -= 1
+                    break
                 if ok4:
                     return dict(index=int(i), rank=rank, tried=tried, flip=flip, score=float(g[i, 0]),
                                 width=float(g[i, 1]), depth=float(g[i, 3]), p_g=p_g, R_g=R_g, R_b=R_b,
@@ -224,7 +230,7 @@ def run_one(args):
         settle(m, d, arm)
         scene = np.load(os.path.join(out, "scenes", tr["tag"] + ".npz"))
         cache = np.load(os.path.join(out, "cache", "gsnet", tr["tag"] + ".npz"))
-        gr = choose_grasp(m, arm, scene, cache)
+        gr = choose_grasp(m, arm, scene, cache, skip=tr.get("cand", 0))
         rec.update(grasp_index=gr["index"], grasp_tried=gr["tried"])
         if gr["index"] < 0:
             rec.update(outcome="no reachable grasp", success=False)
@@ -359,7 +365,9 @@ def run_one(args):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["scenes", "run"])
+    ap.add_argument("cmd", choices=["scenes", "run", "candidates"],
+                    help="candidates: execute each scene's first K reachable grasps (re-ranking headroom)")
+    ap.add_argument("--k", type=int, default=10, help="grasps per scene for 'candidates'")
     ap.add_argument("--out", default="results/b0")
     ap.add_argument("--final-set", default="results/objects/final_set.csv")
     ap.add_argument("--jobs", type=int, default=128)
@@ -368,6 +376,8 @@ def main():
     trs = trials(a.final_set)
     if a.only:
         trs = [t for t in trs if t["tag"] in a.only.split(",")]
+    if a.cmd == "candidates":
+        trs = [dict(t, cand=c) for t in trs for c in range(a.k)]
     os.makedirs(os.path.join(a.out, "scenes"), exist_ok=True)
     with Pool(min(a.jobs, len(trs))) as pool:
         if a.cmd == "scenes":
@@ -377,7 +387,7 @@ def main():
             return
         rows = pool.map(run_one, [(t, a.out) for t in trs], chunksize=1)
     keys = sorted({k for r in rows for k in r})
-    with open(os.path.join(a.out, "trials.csv"), "w", newline="") as f:
+    with open(os.path.join(a.out, "candidates.csv" if a.cmd == "candidates" else "trials.csv"), "w", newline="") as f:
         w = csv.DictWriter(f, keys)
         w.writeheader()
         w.writerows(rows)
