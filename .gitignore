@@ -1,0 +1,17 @@
+# third-party assets: downloaded by scripts/setup_assets.sh or by hand (weights must not be redistributed)
+assets/menagerie/
+assets/weights/
+*.tar
+
+# regenerable logs and build outputs
+results/**/*.log
+results/*.log
+__pycache__/
+*.pyc
+docs/*.aux
+docs/*.log
+docs/*.out
+docs/*.toc
+
+# OS
+.DS_Store
