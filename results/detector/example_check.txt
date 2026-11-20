@@ -1,0 +1,21 @@
+# gpu/example_check.py on the authors' example scene, RTX 3080, 2026-11-20.
+# 'rerun' compares against a second environment installed only from the saved wheels, with the CUDA toolkit hidden.
+# Steady-state network time over 12 scenes in one process: GSNet 47 ms, baseline 92 ms per scene.
+
+[baseline] 327 raw -> 124 collision-free -> 79 after NMS (net 837 ms, seed 1861000095)
+  top-20 score       1.143 (best) ... 0.427
+  surface distance    median 0.0 mm, max 0.0 mm
+  approach . ray      min -0.33, median 0.64 (> 0: from the camera side)
+  width               6.7-10.0 cm, 6/20 fit the Panda (<= 8 cm)
+  rotation |R R^T-I|  1.2e-07
+  rerun               identical: True (max |diff| 0.0e+00)
+
+[gsnet] 1024 raw -> 163 collision-free -> 63 after NMS (net 677 ms, seed 1861000095)
+  top-20 score       0.718 (best) ... 0.237
+  surface distance    median 0.0 mm, max 0.0 mm
+  approach . ray      min -0.46, median 0.73 (> 0: from the camera side)
+  width               5.5-10.0 cm, 6/20 fit the Panda (<= 8 cm)
+  rotation |R R^T-I|  1.2e-07
+  rerun               identical: True (max |diff| 0.0e+00)
+
+SANITY PASS

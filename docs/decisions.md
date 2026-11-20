@@ -17,6 +17,7 @@ Every change from the proposal (`proposal/proposal_final.tex`), with the reason 
 | D11 | Wording fixes to the proposal | 2026-11-17 |
 | D12 | Full-arm scene rules for step 2 | 2026-11-17 |
 | D13 | New control "B0 + blind retry" (professor's required change) | 2026-11-20 |
+| D14 | Detector runs: pinned GPU environment, cached once per scene; Panda width rule still open | 2026-11-20 |
 
 ---
 
@@ -189,3 +190,15 @@ The margin ρ is the large-certainty limit of the same rule (F.2).
 - Slip is read from the simulator. That is an oracle trigger, which gives blind retrying its best possible chance, so the control is deliberately strong. If AnyGrasp++ still beats it, its gain does not come from simply retrying.
 
 **Effect on the plan:** one more method on every object set (B0, B0 + retry, B1, B2, AnyGrasp++, AnyGrasp++ ideal). Detector outputs are cached per scene, so the retry needs a new detection only after the set-down. The extra cost is simulation time on the Mac.
+
+## D14. Detector runs: pinned GPU environment, cached once per scene
+
+**Environment** (`gpu/setup_gpu.sh`): Python 3.10, PyTorch 2.1.2 + CUDA 11.8, gcc 11, numpy 1.23.5, MinkowskiEngine from the GSNet authors' fork (`chenxi-wang/MinkowskiEngine`, master), all four source repos pinned to a commit. This is the stack the authors' code was written against. The rented image's own PyTorch 2.14 / CUDA 13 is newer than MinkowskiEngine has been tested with, so it is left untouched. The compiled extensions are kept as wheels for sm_80/86/89, so a later session on any RTX 30xx/40xx or A-series card installs them in minutes instead of recompiling.
+
+**One extension build serves both detectors.** GSNet's copy of `pointnet2` differs from graspnet-baseline's only in line endings and comments. GSNet's copy of `knn` still uses PyTorch's removed THC API, and GSNet uses `knn` only to build training labels, so the baseline's updated copy is the one built.
+
+**Pipelines follow the authors' inference scripts exactly** (`gpu/detect_grasps.py`): GSNet with 15000 points and 5 mm voxels; the baseline with 20000 points, 300 views, 12 angles and 4 depths. Then the authors' model-free collision check (1 cm voxels, 5 cm approach, 1 cm threshold) and graspnetAPI NMS (3 cm, 30°). The cache stores the raw network output, the collision mask and the NMS order, so filters such as D3 are applied later without rerunning the network. Point sampling is seeded per scene, and a rerun reproduces the output bit for bit (checked on the authors' example scene).
+
+**Open: the Panda width rule.** Both detectors report width = 1.2 × predicted object thickness, clamped at 10 cm (they were trained for a 10 cm gripper). The Panda opens to 8 cm. On the authors' example scene only 6 of the baseline's top 20 grasps report ≤ 8 cm. Proposed rule for every method: keep a grasp only if its reported width ≤ 8 cm, which keeps the authors' 20% clearance. To fix before step 3.
+
+**Effect on the plan:** the retry in B0 + blind retry (D13) and AnyGrasp++'s regrasp both happen after a set-down that can move the object, so they need a second detection on the new scene. Detection therefore runs in two batched passes on the GPU: initial scenes, then post-set-down scenes. The setup above is built to be reused for that.

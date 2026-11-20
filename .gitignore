@@ -15,3 +15,10 @@ docs/*.toc
 
 # OS
 .DS_Store
+
+# compiled detector extensions (rebuild with gpu/setup_gpu.sh)
+assets/gpu_wheels/
+*.whl
+
+# drawn on the graspnet-baseline example photo (noncommercial licence): kept local, not redistributed
+results/detector/example_grasps.png
