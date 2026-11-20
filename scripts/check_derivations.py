@@ -662,6 +662,45 @@ check("I.4", "mj", np.abs(width - want_w).max() <= 1.5 and stray == 0,
       f"shadow strip behind a 10 cm box: {width.min()}-{width.max()} px wide (f b (1/z1 - 1/z2) = {want_w:.1f} px); "
       f"{stray} false holes on the open table")
 
+# ---------------------------------------------------------------- C.6 predicting the contact patch (M2)
+from anygrasp_pp import m2 as M2  # noqa: E402
+
+def synth_face(gap_fn, top=None, n=60):
+    """Noise-free cloud of the object's two side faces at y = +-(0.02 - gap(x, z)) in the hand frame."""
+    xs = np.linspace(-0.012, 0.012, n)
+    zs = np.linspace(-0.012, 0.012, n)
+    X, Z = np.meshgrid(xs, zs)
+    X, Z = X.ravel(), Z.ravel()                              # Z here is z_up on the pad
+    if top is not None:
+        keep = Z <= top
+        X, Z = X[keep], Z[keep]
+    pts = []
+    for side in (1, -1):
+        y = side * (0.02 - gap_fn(X, Z))
+        pts.append(np.stack([X, y, -Z], 1))                  # hand z = approach = -z_up
+    return np.vstack(pts)
+
+
+mass_c6 = 0.6
+W6 = mass_c6 * P.G
+grid6 = grid_points()
+def winkler_dstar(gaps):
+    f = M2.winkler_forces(gaps)
+    on = f > 1e-6
+    return 2 * P.patch_torque_capacity(grid6[on], W6 / 2, P.MU, f.sum(), weights=f[on]) / W6
+p0, R0 = np.array([0.0, 0.0, 0.5]), np.eye(3)                 # hand frame = world axes, 0.5 m above the table
+flat_pred, _ = M2.predicted_dstar(synth_face(lambda x, z: 0 * x) + p0, p0, R0, 0.08, mass_c6)
+th = np.radians(2.0)
+tilt_pred, _ = M2.predicted_dstar(synth_face(lambda x, z: np.tan(th) * (x + 0.012)) + p0, p0, R0, 0.08, mass_c6)
+tilt_ref = winkler_dstar(np.tan(th) * (grid6[:, 0] - grid6[:, 0].min()))
+half_pred, info_h = M2.predicted_dstar(synth_face(lambda x, z: 0 * x, top=0.0) + p0, p0, R0, 0.08, mass_c6)
+half_ref = winkler_dstar(np.where(grid6[:, 1] <= 0.0 + M2.CELL_SUPPORT, 0.0, np.inf))
+check("C.6", "num", abs(flat_pred - P.patch_dstar(grid6, m=mass_c6)) < 1e-4 and abs(tilt_pred - tilt_ref) < 1e-3
+      and abs(half_pred - half_ref) < 1e-3,
+      f"virtual squeeze on noise-free faces: flat {flat_pred * 100:.2f} cm (full face {P.patch_dstar(grid6, m=mass_c6) * 100:.2f}), "
+      f"2 deg {tilt_pred * 100:.2f} cm (Winkler {tilt_ref * 100:.2f}), pad half over the top edge {half_pred * 100:.2f} cm "
+      f"(Winkler {half_ref * 100:.2f})")
+
 # ---------------------------------------------------------------- J. executing a grasp with the arm
 from anygrasp_pp import robot as RB  # noqa: E402
 

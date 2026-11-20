@@ -24,7 +24,7 @@ The useful part is that the friction model predicts these outcomes grasp by gras
 
 **Steps 4–5 (next).** M1–M3, the "B0 + blind retry" control, stress tests and the final evaluation.
 
-The reasoning behind every change from the proposal is in `docs/decisions.md`. Every equation the code uses is derived in `docs/derivations.pdf`, and `scripts/check_derivations.py` tests each one (88 checks).
+The reasoning behind every change from the proposal is in `docs/decisions.md`. Every equation the code uses is derived in `docs/derivations.pdf`, and `scripts/check_derivations.py` tests each one (89 checks).
 
 ## Running it
 
@@ -34,7 +34,7 @@ You need conda and, for the detector, a Linux machine with an NVIDIA GPU.
 conda create -n da434 python=3.12 && conda activate da434
 pip install -r requirements.txt
 bash scripts/setup_assets.sh        # downloads the Franka model at a pinned commit
-python scripts/check_derivations.py # about 5 minutes, should print 88/88
+python scripts/check_derivations.py # about 5 minutes, should print 89/89
 ```
 
 The detector weights can't be redistributed, so download them yourself and put them in `assets/weights/`:

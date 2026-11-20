@@ -20,7 +20,7 @@ from scipy.stats import norm
 G = 9.81
 EZ = np.array([0.0, 0.0, 1.0])
 
-# Nominal values for THIS study (docs/derivations.tex A.1). Defaults only; pass your own for anything else.
+# Nominal values for THIS study (docs/derivations.tex A.1). Defaults only; other values can be passed for anything else.
 MU = 0.5          # pad-object friction
 FN = 70.0         # normal force per pad [N] (Franka Hand continuous grasp force)
 A_PAD = 0.006     # soft-finger contact patch radius [m] (point-pad model only)

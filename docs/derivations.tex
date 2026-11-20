@@ -383,6 +383,23 @@ If one width is zero, $F$ becomes the uniform CDF of the other; if both are zero
 \fix{Version 1 used a Gaussian with the uniform's mean and covariance without saying so. That misestimates $P_{\text{hold}}$ by up to about 0.11, for example 0.47 vs 0.59 for a 20\,cm footprint.}
 \meta{C.5 [num] (vs Monte Carlo; the Gaussian values are printed for comparison)}{physics.p\_hold\_uniform}
 
+\subsection{Predicting a grasp's contact patch from the point cloud}
+\textbf{Claim.} Before touching the object, a grasp's slip distance can be predicted from the depth cloud by squeezing the rubber-layer pad (B.6) against the observed surface. In the hand frame of the planned grasp ($x$ across the pad, $y$ the closing axis, $z$ the approach), take the cloud points in one pad's $17\times17$\,mm footprint on its side, $s = \pm y > 0$. Fit the surface distance $s(x, z_\uparrow)$ by least squares (quadratic, or a plane if there are fewer than 20 points). Then each grid cell $i$ with material has gap $g_i = \max_j s_j - s_i$ (maximum over cells with material), the pad forces follow the Winkler solution with total 70\,N, and
+\begin{equation}\label{eq:dstarpred}
+\dstar_{\text{pred}} = \frac{T_L(W/2) + T_R(W/2)}{W},
+\end{equation}
+where $T$ is the patch capacity (A.12) with those forces as weights.
+
+\textbf{Derivation.}
+\begin{enumerate}[nosep]
+\item The pad closes along $\mp y$ from outside, so it first meets the surface where $s$ is largest; there the gap is zero, and every other cell's gap is the extra distance it must travel, $\max_j s_j - s_i$.
+\item With these gaps the pad is a Winkler bed pressed with 70\,N (B.6), which gives each cell's force.
+\item The two pads share the weight equally (A.5), each pushing up with $W/2$; their twist capacities add, and dividing the total by $W$ gives the slip distance (A.12). \hfill $\square$
+\end{enumerate}
+\textbf{Which cells have material.} The camera sees side faces at grazing angles, so the cloud there is sparse. A cell counts as touching material if it lies within the observed footprint across the pad, no higher than the object's observed top edge, and above the table. If one pad sees fewer than 12 points (an occluded side), it is assumed to mirror the other; if neither does, the grasp gets $\dstar_{\text{pred}} = 0$.
+\note{On the executed B0 grasps (0.45\,kg), the prediction is conservative: median 2.7\,cm against 4.4\,cm measured from the simulator's contacts, with rank correlation 0.3. Grasps it predicts will hold (with the true lever arm) held 85\% of the time. The cloud's noise (about 1\,mm) is larger than the pad's sink (0.2--0.6\,mm), so fitted surfaces look rougher than they are and fewer cells engage.}
+\meta{C.6 [num] (noise-free synthetic surfaces: flat face, $2^\circ$ misalignment, and a pad half over the edge, against B.6's Winkler solution)}{m2.predicted\_dstar}
+
 % =====================================================================
 \section{Motion}
 
