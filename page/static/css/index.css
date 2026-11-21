@@ -1,7 +1,7 @@
 /* Based on the Nerfies project page (github.com/nerfies/nerfies.github.io), CC BY-SA 4.0. */
 body { font-family: 'Noto Sans', sans-serif; }
-.publication-title, .publication-authors { font-family: 'Google Sans', 'Noto Sans', sans-serif; }
-.publication-subtitle { font-family: 'Castoro', serif; color: #555; }
+.publication-title, .publication-authors, .section .title { font-family: 'Google Sans', 'Noto Sans', sans-serif; }
+.publication-subtitle { font-family: 'Castoro', serif; font-style: italic; color: #555; }
 .link-block a { margin: 5px 3px; }
 .teaser .hero-body { padding-top: 0; padding-bottom: 1.5rem; }
 video { width: 100%; border-radius: 6px; display: block; background: #eee; }
