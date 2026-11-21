@@ -2,6 +2,8 @@
 
 Final project for DA434 (Embodied Intelligence), Dawit Chun.
 
+Project page with videos and results: https://da-dawit.github.io/anygrasp-plus-plus/
+
 Grasp detectors like AnyGrasp and GSNet pick grasps from the object's shape. That works until the weight sits somewhere the shape doesn't show: a hammer head, a drill battery, a half-full bottle. Then a grasp that looks fine twists out of the gripper as soon as the object leaves the table.
 
 AnyGrasp++ leaves the detector alone and adds three steps around it:
