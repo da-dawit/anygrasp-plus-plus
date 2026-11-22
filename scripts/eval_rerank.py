@@ -1,6 +1,6 @@
 """Offline scoring of re-ranking policies on the dev set (seeds 0-5). `run_b0.py candidates` already ran each
 scene's first K reachable grasps, so a policy is scored by the recorded outcome of the one it picks.
-Policies: B0, centre, M2 (score x P(hold)), M2 with the true CoM (ideal M3), oracle. Writes candidates_features.csv.
+Policies: B0, center, M2 (score x P(hold)), M2 with the true CoM (ideal M3), oracle. Writes candidates_features.csv.
 
     python scripts/eval_rerank.py --run results/b0_m045
 """
@@ -63,7 +63,7 @@ def main():
 
     policies = {
         "B0": lambda c: min(c, key=lambda f: int(f["cand"])),
-        "centre": lambda c: min(c, key=lambda f: f["d_vis"]),
+        "center": lambda c: min(c, key=lambda f: f["d_vis"]),
         "M2": lambda c: max(c, key=lambda f: (f["score"] * f["p_hold"], -int(f["cand"]))),
         "M2, known CoM": lambda c: max(c, key=lambda f: (known_com(f), f["dstar_pred"] - float(f["lever_arm_cm"] or 99) / 100, -int(f["cand"]))),
     }

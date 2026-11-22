@@ -62,7 +62,7 @@ class _Geoms:
 
 
 def run_trial(shift, lift_h=LIFT_H, lift_t=LIFT_T, hold_t=HOLD_T, twist_deg=TWIST_DEG, **rig):
-    """Grasp at the object centre, (mid-air: ramp gravity in), lift, hold. rig: options for build_xml."""
+    """Grasp at the object center, (mid-air: ramp gravity in), lift, hold. rig: options for build_xml."""
     grip = rig.get("grip", "force")
     midair = rig.get("midair", False)
     m = mujoco.MjModel.from_xml_string(build_xml(shift, **rig))

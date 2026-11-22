@@ -49,11 +49,11 @@ def _fit_surface(xz, s):
 
 def pad_patch(pts_hand, side, w_open, cell_world_z=None, table_z=0.0):
     """Predicted per-cell forces on one fingertip. pts_hand: cloud in the hand frame (x across, y closing, z
-    approach); side: +1 or -1 (which finger); the pad centre is at (0, side*y, 0). Returns (forces (16,), n_pts)."""
+    approach); side: +1 or -1 (which finger); the pad center is at (0, side*y, 0). Returns (forces (16,), n_pts)."""
     grid = grid_points()                                  # (x, z_up) on the pad face
     x, y, z = pts_hand[:, 0], pts_hand[:, 1], pts_hand[:, 2]
     zu = -z                                               # pad "up" is against the approach
-    s = side * y                                          # distance from the centre line toward this pad
+    s = side * y                                          # distance from the center line toward this pad
     sel = (np.abs(x) <= PAD_HALF + CELL_SUPPORT) & (np.abs(zu) <= PAD_HALF + CELL_SUPPORT) & (s > 0) & (s <= w_open / 2)
     if sel.sum() < MIN_PTS:
         return None, int(sel.sum())

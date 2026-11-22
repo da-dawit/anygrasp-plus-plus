@@ -39,7 +39,7 @@ LIFT_H, LIFT_T, HOLD_T = 0.10, 1.2, 2.0
 T_SETTLE, T_REACH, T_DESCEND, T_CONVERGE, T_CLOSE, T_SQUEEZE = 1.0, 2.5, 1.5, 1.0, 0.5, 0.5
 T_UP, T_ACROSS, T_CARRY_JOINT, T_LOWER, T_RELEASE, T_RETRACT, T_AFTER = 2.0, 3.5, 4.0, 1.5, 0.5, 0.8, 0.5
 RETRACT_H = 0.10         # hand moves up this far after opening, before the bin check [m]
-BIN_ABOVE = 0.40         # TCP height above the bin centre for the carry [m]
+BIN_ABOVE = 0.40         # TCP height above the bin center for the carry [m]
 BIN_YAWS = (0, 45, -45, 90, -90, 135, -135, 180)   # wrist turns tried for the carry [deg]
 RELEASE_CLEAR = 0.02     # lowest object point this far above the bin floor at release [m]
 DEPTH_ADD = float(os.environ.get("DEPTH_ADD", 0.0))   # probe: push each grasp this much deeper [m] (0 = as detected)

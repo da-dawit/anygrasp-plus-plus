@@ -48,7 +48,7 @@
         internship.</p>
       <p>AnyGrasp++ keeps the detector as it is and adds three steps. M1 checks that the whole arm can reach a grasp
         without collisions. M2 re-ranks the detector's grasps with a friction model of the fingertips. M3 lifts the
-        object 2&nbsp;cm, measures its weight and centre of mass at the wrist, and if the grasp is slipping, puts the
+        object 2&nbsp;cm, measures its weight and center of mass at the wrist, and if the grasp is slipping, puts the
         object down and grasps it again somewhere better. Everything runs in MuJoCo with a Franka Panda, a simulated
         RealSense D435 camera and ten scanned objects that each hide a heavy core.</p>
     </div>
@@ -106,7 +106,7 @@
   <div class="container is-max-desktop">
     <h2 class="title is-3">All development scenes</h2>
     <div class="content"><p>Rows are shifts and columns are seeds. In each cell the left half is B0 and the right half
-      is M2's first choice (green: in the bin, red: turned in the hand, pink: other failure, grey: no reachable grasp).
+      is M2's first choice (green: in the bin, red: turned in the hand, pink: other failure, gray: no reachable grasp).
       Clicking a cell lists every grasp that was tried in that scene.</p></div>
     <div class="explorer-controls" id="obj-buttons"></div>
     <div class="grid-wrap"><table class="trials" id="trials"></table></div>
@@ -151,7 +151,7 @@
       <p>In the first full run B0 succeeded in 37 of 300 trials, and the hidden shift made no difference. When I
         looked at the contacts, the pads were touching the object at only 2 of their 16 contact points, even on
         flat bricks. The pad model from step 1 only compressed 0.11&nbsp;mm at 70&nbsp;N, about twice as stiff as a
-        2&nbsp;mm rubber layer, so a tilt of less than half a degree lifted one edge off the object. I remodelled the
+        2&nbsp;mm rubber layer, so a tilt of less than half a degree lifted one edge off the object. I remodeled the
         pad as a thin rubber layer and checked it against the theory for a few contact cases. After that the
         contacts were larger (histograms below) and the friction model agreed with more of the outcomes.</p>
     </div>

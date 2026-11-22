@@ -37,13 +37,13 @@ This is where I record every change from the proposal (`proposal/proposal_final.
 
 I use the open GSNet code (`github.com/graspnet/graspness_unofficial`) with its RealSense weights, and keep graspnet-baseline as a fallback. AnyGrasp stays a stretch goal, as in the proposal.
 
-AnyGrasp turned out to be impractical here. The detector only ships as a compiled library ("Due to the IP issue, currently we can only release the SDK library file of AnyGrasp in a licensed manner", SDK README), and the licence is locked to one machine's feature ID. It runs only on Linux x86_64 with CUDA, so not on my Mac. Getting a licence means a form with an advisor's signature and about five working days of waiting, and the weights only come with the licence. I also rent GPUs on Vast.ai, and a stopped instance may not come back as the same machine, which would break a machine-locked licence.
+AnyGrasp turned out to be impractical here. The detector only ships as a compiled library ("Due to the IP issue, currently we can only release the SDK library file of AnyGrasp in a licensed manner", SDK README), and the license is locked to one machine's feature ID. It runs only on Linux x86_64 with CUDA, so not on my Mac. Getting a license means a form with an advisor's signature and about five working days of waiting, and the weights only come with the license. I also rent GPUs on Vast.ai, and a stopped instance may not come back as the same machine, which would break a machine-locked license.
 
-GSNet is enough for this question. AnyGrasp's own paper says its geometry module "is based on GSNet, with a minor modification to incorporate the stable score into the network" (arXiv 2212.08333). AnyGrasp adds a learned centre-of-mass "stable score", 168 more training scenes, a collision check on the top 100 grasps, and tracking, but the paper doesn't compare it head to head with GSNet. My method treats the detector as a black box anyway, and a hidden weight is just as invisible to both. Baseline B2, which re-ranks by the centre of the visible shape, stands in for AnyGrasp's stable score.
+GSNet is enough for this question. AnyGrasp's own paper says its geometry module "is based on GSNet, with a minor modification to incorporate the stable score into the network" (arXiv 2212.08333). AnyGrasp adds a learned center-of-mass "stable score", 168 more training scenes, a collision check on the top 100 grasps, and tracking, but the paper doesn't compare it head to head with GSNet. My method treats the detector as a black box anyway, and a hidden weight is just as invisible to both. Baseline B2, which re-ranks by the center of the visible shape, stands in for AnyGrasp's stable score.
 
 GSNet and graspnet-baseline are licensed for academic, noncommercial research, which covers a course project. The weights must not be redistributed, so they stay out of the repository. They live in `assets/weights/`: `minkuresunet_realsense.tar` (15.4 M parameters, SHA-256 `a0b9d85b...`) and `checkpoint-rs.tar` (1.0 M, `60680087...`). Both load, and every layer name matches the model code.
 
-If I get access to a fixed Linux machine with an NVIDIA GPU (a lab PC, say), AnyGrasp could come back as an extra baseline, to ask whether its learned centre-of-mass score already handles hidden weights.
+If I get access to a fixed Linux machine with an NVIDIA GPU (a lab PC, say), AnyGrasp could come back as an extra baseline, to ask whether its learned center-of-mass score already handles hidden weights.
 
 ## D2. A grasp fails if the object turns more than 10 deg in the hand (was 30 deg)
 
@@ -61,13 +61,13 @@ The slip model needs the closing axis close to horizontal, so that friction rath
 
 Each fingertip is 16 contact points spread over the real Franka fingertip face (17 x 17 mm, from the Menagerie model's pad box).
 
-The size of the contact patch decides when an object twists out. A real fingertip touches across its whole face on a flat side, along a line on a handle, and along one edge when the object is slightly turned or the grasp is off-centre. A grid reproduces all of that; a single point with a fixed patch radius (the proposal's a = 6 mm) can't. With the grid, twisting resistance comes out of the contact geometry, so side question (a) becomes a real test instead of something the simulator satisfies by construction.
+The size of the contact patch decides when an object twists out. A real fingertip touches across its whole face on a flat side, along a line on a handle, and along one edge when the object is slightly turned or the grasp is off-center. A grid reproduces all of that; a single point with a fixed patch radius (the proposal's a = 6 mm) can't. With the grid, twisting resistance comes out of the contact geometry, so side question (a) becomes a real test instead of something the simulator satisfies by construction.
 
 On a flat face this pad holds up to d\* = 7.53 cm at 0.6 kg, mu = 0.5 and 70 N, where the proposal's point pad gave 4.74 cm. A handle-like line contact holds 5.74 cm, and edge contacts much less. So the 0.6 kg objects with 0-8 cm shifts would barely reach their failure point, which D15 deals with.
 
 Softness barely matters when the fingertip sits flat on the object, but it decides what happens when it doesn't. A box yawed 3 deg starts slipping at 1.4 cm with a rigid pad, 2.8 cm with rubber (0.11 mm sink) and 5.7 cm with a soft pad (0.6 mm). It fails at 1.6 cm with the rigid pad and 5.2 cm with rubber. GSNet's grasp angles come in 15 deg steps, so misalignments of a few degrees are normal. I took the default from a physical estimate rather than tuning it: a 2 mm rubber layer with E of about 3 MPa under 70 N over 17 x 17 mm (0.24 MPa) compresses about 0.16 mm. Hard plastic pads are run as a sensitivity case, like mu = 0.8. (D20 later replaced this rubber model with one that behaves correctly on misaligned contact.)
 
-The patch model assumes the fingertip is parallel to the object face, so predicting from the point cloud which pad points will touch is the main open modelling question for M2.
+The patch model assumes the fingertip is parallel to the object face, so predicting from the point cloud which pad points will touch is the main open modeling question for M2.
 
 I keep the single-point pad only to verify the simulator. MuJoCo implements the textbook soft-finger model exactly, and 8 of 8 parameter combinations fall in the predicted band.
 
@@ -79,7 +79,7 @@ Every object geom has `priority="1"` and carries its own friction, condim, solre
 
 The step-1 settings were solref 0.01 1 and solimp 0.95 0.99 0.001 for the rubber pad, and solref 0.004 1, solimp 0.99 0.999 0.001 for the rigid one, with an elliptic friction cone, impratio 10, 2000 noslip iterations and a 2 ms time step. (D20 replaced the rubber setting.)
 
-MuJoCo's defaults let a 70 N contact sink millimetres and let friction creep under load. With them both pad types fail near 4.6 cm, which hides the pad physics. The noslip solver stops at its tolerance, so the iteration count is only a cap: 20 left 0.8 deg of false creep on the grid pad, 500 was enough for aligned grasps but not misaligned ones, and 2000, 5000 and 20,000 give identical results. solref 0.004 is the smallest time constant MuJoCo allows at a 2 ms step (twice the step); a larger step would silently clamp it.
+MuJoCo's defaults let a 70 N contact sink millimeters and let friction creep under load. With them both pad types fail near 4.6 cm, which hides the pad physics. The noslip solver stops at its tolerance, so the iteration count is only a cap: 20 left 0.8 deg of false creep on the grid pad, 500 was enough for aligned grasps but not misaligned ones, and 2000, 5000 and 20,000 give identical results. solref 0.004 is the smallest time constant MuJoCo allows at a 2 ms step (twice the step); a larger step would silently clamp it.
 
 A grasp trial with the grid pad costs about 1-6 s of computer time, and misaligned grasps are the slow ones.
 
@@ -191,7 +191,7 @@ So I added the YCB set (Calli et al. 2015, CC-BY 4.0; 78 objects with textured s
 
 The final set is every object that passes every check, 10 in all (`results/objects/final_set.csv`, from `scripts/final_set.py`): the YCB hammer, power drill, toy airplane and Duplo brick, and from the scanned set a bookend, an excavator toy, an action figure, an elephant figure, a shark toy and a wooden track piece. Each is stable at every shift and gets at least one usable top-down grasp from GSNet at every yaw. The depth model is what lets in the YCB hammer and drill. With ideal depth GSNet gives them no usable grasp at some yaw, which is the proposal's risk 2 (odd grasps on simulated depth) and its mitigation, now measured.
 
-I kept 10 rather than padding to 20, because objects that fail these checks would make B0 fail for reasons that have nothing to do with the centre of mass. The funnel from 1108 scans down to 10 is a result in itself. The trial count stays at the midpoint's 300 (10 x 5 shifts x 6 seeds; the proposal had 20 x 5 x 3). The statistics are clustered over 10 objects instead of 20, so object-level intervals are wider, and I report them that way. Objects whose largest feasible shift is a little under 8 cm (mustard bottle 7.1 cm, spatula 7.3 cm) could join in the Target tier after their own graspability test. The threshold is at least one usable grasp per yaw because B0 needs one grasp to execute; requiring three would keep 6 of the 10.
+I kept 10 rather than padding to 20, because objects that fail these checks would make B0 fail for reasons that have nothing to do with the center of mass. The funnel from 1108 scans down to 10 is a result in itself. The trial count stays at the midpoint's 300 (10 x 5 shifts x 6 seeds; the proposal had 20 x 5 x 3). The statistics are clustered over 10 objects instead of 20, so object-level intervals are wider, and I report them that way. Objects whose largest feasible shift is a little under 8 cm (mustard bottle 7.1 cm, spatula 7.3 cm) could join in the Target tier after their own graspability test. The threshold is at least one usable grasp per yaw because B0 needs one grasp to execute; requiring three would keep 6 of the 10.
 
 The scans' own V-HACD collision pieces stick out a median 6.7 mm (95th percentile) beyond the visible surface, enough to put the fingers on material the camera can't see. Every finalist and YCB candidate gets new pieces from CoACD (`scripts/make_collision.py`, same settings for all, concavity threshold 0.04), which brings the 95th-percentile bulge down to 1.8-4.8 mm (V-HACD was 5.7-28.2 mm on the scanned ones). The 2 mm voxels and surface sampling put a floor of about 2-3 mm on that measure.
 
@@ -220,7 +220,7 @@ B0 is the proposal's "best-scoring grasp that IK can reach". Going down the dete
 
 The controller is computed-torque feedforward plus joint impedance with libfranka's gains, clipped at the Panda's torque limits. It knows the arm and hand but not the payload. The arm reaches in 2.5 s (minimum jerk in joint space) and descends along the approach in 1.5 s. The gripper closes only once the hand is within 1 mm (waiting at most 1 s), at 0.1 m/s per finger until 70 N per pad, then squeezes for 0.5 s, exactly like step 1. Then comes a 10 cm lift in 1.2 s, a 2 s hold, a 2.5 s carry to the bin, lowering until the object is 4 cm above the floor, and release.
 
-A trial succeeds if the object ends in the bin, wasn't dropped before release, and never turned more than 10 deg in the hand between the lift and the release (turning about the approach axis doesn't count). Failures are labelled by whatever happened first: no reachable grasp, no grip (blocked on approach, meaning the hand stopped more than 5 mm short, or closed on air), turned in hand, dropped, or missed the bin. The lever arm d is measured at the end of the squeeze from the pad midpoint, the closing axis and the true CoM.
+A trial succeeds if the object ends in the bin, wasn't dropped before release, and never turned more than 10 deg in the hand between the lift and the release (turning about the approach axis doesn't count). Failures are labeled by whatever happened first: no reachable grasp, no grip (blocked on approach, meaning the hand stopped more than 5 mm short, or closed on air), turned in hand, dropped, or missed the bin. The lever arm d is measured at the end of the squeeze from the pad midpoint, the closing axis and the true CoM.
 
 ## D19. First B0 run: the fingertip was too stiff
 
@@ -232,7 +232,7 @@ The step-1 pad was too stiff to conform. It was calibrated to sink 0.11 mm on a 
 
 ## D20. The fingertip as a thin rubber layer
 
-The rubber layer of D4 (E = 3 MPa, h = 2 mm) is now modelled as a bed of independent springs, one per grid cell, each k_c = E*A_cell/h = 27.1 kN/m. In MuJoCo, a constant impedance (solimp 0.95 0.95) and a direct stiffness (solref -5537.89 -148.834) make each pad point a linear spring of stiffness K/((1-d)A_hat), where d is the impedance and A_hat is MuJoCo's estimate of the contact's inverse inertia. I set the stiffness so that a free 1 kg object, the study's condition, sees exactly k_c per point, which gives a flat sink of 0.161 mm at 70 N. The step-1 setting is kept as `CONTACT_V1`.
+The rubber layer of D4 (E = 3 MPa, h = 2 mm) is now modeled as a bed of independent springs, one per grid cell, each k_c = E*A_cell/h = 27.1 kN/m. In MuJoCo, a constant impedance (solimp 0.95 0.95) and a direct stiffness (solref -5537.89 -148.834) make each pad point a linear spring of stiffness K/((1-d)A_hat), where d is the impedance and A_hat is MuJoCo's estimate of the contact's inverse inertia. I set the stiffness so that a free 1 kg object, the study's condition, sees exactly k_c per point, which gives a flat sink of 0.161 mm at 70 N. The step-1 setting is kept as `CONTACT_V1`.
 
 I checked it against the thin-layer solution with nothing refitted, pressing at 70 N against a fixed object (`scripts/calibrate_pad_layer.py`, `results/pad/layer.json`):
 
@@ -248,7 +248,7 @@ Per-point forces match the theory within 0.05 N of 70 N. Both pads behave as spr
 
 On B0 at 1.0 kg (`results/b0/trials.csv`) it barely changed the success rate (34 of 300, against 37), but the contact patch grew. Counted the way D19 counts (every trial with a measured lever arm, including grasps where one pad never touched), the weaker pad's median contact count went from 2 to 3, the median per-grasp d\* from 1.0 to 1.8 cm, and agreement with the outcome from 79% to 84%. `analyze_b0.py` leaves out the grasps where a pad never touched (16 here) and gets 4 points, 1.9 cm and 86%; `results/midpoint/fig_failure.png` uses D19's counting for both pads. The held fractions by |d|/d\* were 25/31 below 0.5, 12/15 at 0.5-0.9, 2/9 at 0.9-1.1, 9/28 at 1.1-2 and 12/175 above 2, with a fitted 50% point at 0.87 against the model's 1.
 
-Tracing six trials showed where the contacts land: mostly on the pad's lower rows and middle columns. GSNet approaches 7-28 deg off vertical, which tilts the pad against vertical sides, and the objects' sides are curved, studded or tapered. Real grasps on these objects make small patches; it isn't a modelling artefact. I re-ran the step-1 calibration with this pad as the nominal one.
+Tracing six trials showed where the contacts land: mostly on the pad's lower rows and middle columns. GSNet approaches 7-28 deg off vertical, which tilts the pad against vertical sides, and the objects' sides are curved, studded or tapered. Real grasps on these objects make small patches; it isn't a modeling artifact. I re-ran the step-1 calibration with this pad as the nominal one.
 
 ## D21. Object mass re-chosen with the measured slip distance: 0.45 kg
 
@@ -275,7 +275,7 @@ The new protocol, for every method:
 - Turning in the hand and dropping are counted from the lift to the end of the carry, while the grasp alone holds the object. Contact while it's being set down doesn't count against the grasp.
 - After opening, the hand moves 10 cm straight up and waits 0.5 s before the bin check, the way a robot backs away after letting go. Without this, 118 of 125 "missed the bin" cases in the candidates run were objects resting in the bin but still touching an open fingertip.
 - An object is in the bin if its CoM is inside the bin's footprint, it rests below 0.25 m (standing, lying or leaning on a wall), and the hand has let go.
-- An object that ends more than 1 m from the bin was thrown by a contact blow-up at release (7 of 2,700 candidate trials). It counts as a failure, but it's labelled separately so it isn't mistaken for a grasp failure.
+- An object that ends more than 1 m from the bin was thrown by a contact blow-up at release (7 of 2,700 candidate trials). It counts as a failure, but it's labeled separately so it isn't mistaken for a grasp failure.
 
 B0 (both masses) and the candidates run are re-run under this protocol on the same scenes and detections. The first B0 results stay on file as `trials.csv` in `results/b0` and `results/b0_m045`.
 
@@ -289,14 +289,14 @@ The candidates run (`results/b0_m045_v2/candidates.csv`) gives the true outcome 
 |---|---|
 | B0, the detector's first reachable grasp | 96/270 (36%) |
 | M2 v1: detector score x P(hold), cloud-predicted d\*, uniform CoM prior | 34% |
-| grasp closest to the visible centre (the proposal's B2) | 40% |
+| grasp closest to the visible center (the proposal's B2) | 40% |
 | M2 v1 with the true CoM | 42% |
 | calibrated M2, leave-one-object-out | 116/270 (43%) |
 | best of the 10 (ceiling for re-ranking) | 174/270 (64%) |
 
-The physics version of M2 doesn't beat B0, because its d\* predicted from the cloud is too noisy (rank correlation about 0.3 with the measured value; the cloud's 1 mm noise is bigger than the pad's sink). A small logistic model over the same observable quantities does better: predicted d\*, lever arm about the visible centre, their ratio, P(hold), detector score, approach angle, width and depth. Evaluated with each object left out of its own training, it separates successes from failures with an AUC of 0.80.
+The physics version of M2 doesn't beat B0, because its d\* predicted from the cloud is too noisy (rank correlation about 0.3 with the measured value; the cloud's 1 mm noise is bigger than the pad's sink). A small logistic model over the same observable quantities does better: predicted d\*, lever arm about the visible center, their ratio, P(hold), detector score, approach angle, width and depth. Evaluated with each object left out of its own training, it separates successes from failures with an AUC of 0.80.
 
-The lever arm about the visible centre carries most of the signal (AUC 0.79 alone). After it come the grasp depth (deeper is better, which fits the pads only touching on their lower rows in D20), the detector score and P(hold). This is `scripts/m2_learn.py`.
+The lever arm about the visible center carries most of the signal (AUC 0.79 alone). After it come the grasp depth (deeper is better, which fits the pads only touching on their lower rows in D20), the detector score and P(hold). This is `scripts/m2_learn.py`.
 
 The ceiling of 64% means there's a lot left. The next steps are refining the grasp depth so the pads cover more of the object, and M3, where the test lift measures the CoM and catches grasps that start to slip.
 
@@ -306,9 +306,9 @@ M2's development numbers come from the same seeds it was calibrated on (with eac
 
 Before building the real control of D13, I scored its upper bound on the executed candidates: if the first grasp fails for any reason, the second grasp in the same order is scored on the undisturbed scene. On the fresh scenes B0 + one blind retry reaches 46% (+13) and M2 + one retry 51% (+18). So retrying by itself accounts for most of a gain, and M2's choice adds about 5 points on top. The real control sets the object down and detects again, so it can only do worse than this bound (`scripts/midpoint_results.py`).
 
-The first rented machine was deleted with the development scenes and detections on it. I rebuilt on a different machine (RTX 4090, different CPU) from `gpu/setup_gpu.sh` and the saved wheels, regenerated the 270 development scenes and re-ran GSNet and B0. Every scene gave bit-identical detections, B0 chose the same grasp in 270/270 trials, and the outcome matched in 266/270 (`results/midpoint/reproduction.json`). The four differences are three contact blow-ups as the hand opens over the bin, which the trial labels as simulation artefacts, and one approach that diverged. CoACD's collision pieces differ between macOS and Linux for the same settings and seed, so the study runs and CoACD stay on Linux.
+The first rented machine was deleted with the development scenes and detections on it. I rebuilt on a different machine (RTX 4090, different CPU) from `gpu/setup_gpu.sh` and the saved wheels, regenerated the 270 development scenes and re-ran GSNet and B0. Every scene gave bit-identical detections, B0 chose the same grasp in 270/270 trials, and the outcome matched in 266/270 (`results/midpoint/reproduction.json`). The four differences are three contact blow-ups as the hand opens over the bin, which the trial labels as simulation artifacts, and one approach that diverged. CoACD's collision pieces differ between macOS and Linux for the same settings and seed, so the study runs and CoACD stay on Linux.
 
-The first rollout videos re-ran logged trials with a camera attached and showed the CoM as coloured dots on a see-through object. I replaced them with plainer ones (D26).
+The first rollout videos re-ran logged trials with a camera attached and showed the CoM as colored dots on a see-through object. I replaced them with plainer ones (D26).
 
 ## D25. Grasping deeper doesn't help (a probe)
 
@@ -322,7 +322,7 @@ The proposal's M3 is a 2 cm test lift that feels the weight and regrasps once if
 
 One try (`scripts/run_m3.py`) goes like this. Reach, descend, close and squeeze as in B0, then lift 2 cm in 1 s and hold for 2 s (D8). During the hold the hand carries the weight W, and the moment about the grasp point is (c - p) x W, which gives the mass and the horizontal position of the CoM, and so the grasp's lever arm about its closing axis. The robot keeps the grasp and carries on with B0's lift, hold, carry and place if the hand carries at least 80% of the expected weight (less means one end is already back on the table) and the measured lever arm drifts less than 3 mm over the hold (more means the object is turning). Otherwise it lowers the object back down, opens, backs off, parks the arm out of view, takes a new D435 image, runs GSNet on it (`gpu/detect_service.py`, a file queue on the GPU machine) and regrasps.
 
-AnyGrasp++ picks its first grasp with calibrated M2 (D23) and its regrasp with a second logistic model that uses the lever arm about the measured CoM instead of the visible centre (fitted on the development candidates; for development scenes the scene's object is left out). B0 + blind retry (D13) starts with B0's grasp and uses the same test lift and the same sensor trigger plus an oracle (tilt over 10 deg or a drop during the test lift, read from the simulator). It regrasps with the detector's first reachable grasp that isn't the one it just tried; centres within 1.5 cm and closing axes within 30 deg count as the same grasp. The grasp that carries the object is judged as in B0, with its tilt counted from its own squeeze.
+AnyGrasp++ picks its first grasp with calibrated M2 (D23) and its regrasp with a second logistic model that uses the lever arm about the measured CoM instead of the visible center (fitted on the development candidates; for development scenes the scene's object is left out). B0 + blind retry (D13) starts with B0's grasp and uses the same test lift and the same sensor trigger plus an oracle (tilt over 10 deg or a drop during the test lift, read from the simulator). It regrasps with the detector's first reachable grasp that isn't the one it just tried; centers within 1.5 cm and closing axes within 30 deg count as the same grasp. The grasp that carries the object is judged as in B0, with its tilt counted from its own squeeze.
 
 Before fixing the rules I tried one more veto on a few scenes: also regrasp whenever the known-CoM model gave less than 0.3. That threw away a shark grasp pinched by its fin that holds despite a 12 cm lever arm, so I made the veto optional. On all 270 development scenes, with a threshold of 0.2, it got 130/270 against 141/270 without it, so I dropped it. Nothing else was tuned, and the fresh scenes were run once with the rule fixed.
 

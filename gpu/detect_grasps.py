@@ -3,7 +3,7 @@
     python gpu/detect_grasps.py --detector gsnet --scenes DIR --out DIR [--shard i/n]
 
 Input: a directory of <name>.npz scenes, each with
-    points        (N,3) float32, metres, camera frame, OpenCV convention (x right, y down, z forward).
+    points        (N,3) float32, meters, camera frame, OpenCV convention (x right, y down, z forward).
                   What the detector sees; crop it to the workspace first like the authors do.
     scene_points  optional (M,3) float32, same frame, only for the collision check (default: points).
                   Pass the full cloud with table and bin walls so grasps that hit them get flagged.

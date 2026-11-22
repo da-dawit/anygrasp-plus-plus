@@ -53,7 +53,7 @@ def score(F, p_cal, run, label):
     policies = {
         "B0 (detector's first reachable grasp)": lambda c: ok(first(c, det)),
         "B0 + blind retry (upper bound)": lambda c: two(c, det),
-        "Closest to the visible centre": lambda c: ok(first(c, lambda f: (-float(f["d_vis"]), -f["cand"]))),
+        "Closest to the visible center": lambda c: ok(first(c, lambda f: (-float(f["d_vis"]), -f["cand"]))),
         "M2 v1 (physics only)": lambda c: ok(first(c, lambda f: (float(f["score"]) * float(f["p_hold"]), -f["cand"]))),
         f"M2 calibrated ({label})": lambda c: ok(first(c, cal)),
         "M2 calibrated + blind retry (upper bound)": lambda c: two(c, cal),

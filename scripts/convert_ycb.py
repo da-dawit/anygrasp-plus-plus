@@ -1,4 +1,4 @@
-"""Copy the YCB google_16k scans (metres) into the MuJoCo scanned-objects layout so the object scripts read both
+"""Copy the YCB google_16k scans (meters) into the MuJoCo scanned-objects layout so the object scripts read both
 sets the same way: <out>/<name>/model.obj, textured.mtl, texture_map.png, plus texture.png (what the scene builder
 looks for). Collision pieces come from make_collision.py. YCB: Calli et al., IEEE RAM 2015, CC-BY 4.0.
 

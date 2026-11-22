@@ -42,7 +42,7 @@ DRIFT_MM = 3.0           # lever-arm drift over the hold that counts as turning 
 LIFTED_FRAC = 0.8        # hand must carry at least this much of the weight (less: one end is still on the table,
                          # so it already turned)
 TAU = float(os.environ.get("M3_TAU", 0.0))   # also regrasp if the known-CoM model gives less than this (0 = off)
-DUP_DIST, DUP_DEG = 0.015, 30.0     # a regrasp this close to a tried grasp (centre, closing axis) is the same grasp
+DUP_DIST, DUP_DEG = 0.015, 30.0     # a regrasp this close to a tried grasp (center, closing axis) is the same grasp
 T_DOWN, T_OPEN, T_BACK, T_PARK, T_REST = 1.0, 0.5, 0.8, 2.5, 1.0
 DETQ = os.environ.get("DETQ", "/root/detq")
 DETECTOR = os.environ.get("DETECTOR", "service")

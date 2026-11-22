@@ -35,7 +35,7 @@ def convex_pieces(model_dir, collision="vhacd"):
 
 
 def occupancy(pieces, voxel=VOXEL):
-    """Boolean grid of voxel centres inside the union of convex pieces. Returns (occ, origin): centre of voxel
+    """Boolean grid of voxel centers inside the union of convex pieces. Returns (occ, origin): center of voxel
     (i, j, k) is origin + voxel * (i, j, k)."""
     allv = np.vstack(pieces)
     lo, hi = allv.min(0) - voxel, allv.max(0) + voxel
@@ -60,7 +60,7 @@ def occupancy(pieces, voxel=VOXEL):
 
 
 def principal_frame(points):
-    """Centroid and principal axes (rows, long axis first) of a uniform solid given by its voxel centres."""
+    """Centroid and principal axes (rows, long axis first) of a uniform solid given by its voxel centers."""
     c = points.mean(0)
     _, _, vt = np.linalg.svd(points - c, full_matrices=False)
     if np.linalg.det(vt) < 0:
@@ -101,7 +101,7 @@ def choose_core(x, eroded, voxel=VOXEL, s_max=max(SHIFTS), M=MASS, rho_max=RHO_M
 
 def mass_properties(points, core, s, voxel=VOXEL, M=MASS):
     """Mass, CoM and inertia about the CoM (3x3) of the object at shift s, from voxels (cube self-inertia
-    included). points: solid voxel centres in the object frame."""
+    included). points: solid voxel centers in the object frame."""
     v = voxel ** 3
     mf = core_masses(s, core["VF"], core["VS"], core["xF"], M)
     rho = np.where(core["F"], mf / core["VF"], (M - mf) / core["VS"])
@@ -118,7 +118,7 @@ def fidelity(occ, origin, visual_vertices, voxel=VOXEL, n=60000, seed=0, mesh=No
     """How well the collision solid matches the visual surface the camera sees.
     bulge: distance from collision-solid boundary voxels to the nearest visual surface point (phantom material)
     gap:   distance from visual surface points to the nearest collision-solid voxel (surface the fingers pass through)
-    Both as (95th percentile, max) in metres."""
+    Both as (95th percentile, max) in meters."""
     if mesh is not None:
         import trimesh
         surf = trimesh.sample.sample_surface(mesh, n, seed=seed)[0]

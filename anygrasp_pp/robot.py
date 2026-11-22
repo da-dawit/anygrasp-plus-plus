@@ -133,7 +133,7 @@ def min_jerk(q0, q1, T, t):
 
 def grasp_to_tcp(R_w, t_w, depth):
     """GraspNet grasp -> Panda TCP target (position, rotation). R_w columns = approach, closing, height; t_w on
-    the object surface; depth = fingertip depth past t_w. Pad centre = t + approach * (depth - PAD_HALF), hand
+    the object surface; depth = fingertip depth past t_w. Pad center = t + approach * (depth - PAD_HALF), hand
     z = approach, hand y = closing."""
     a, c = R_w[:, 0], R_w[:, 1]
     R = np.stack([np.cross(c, a), c, a], axis=1)

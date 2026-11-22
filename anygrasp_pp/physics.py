@@ -6,7 +6,7 @@ acceleration only), and a closing axis near horizontal so friction carries the w
 pressure disc of radius a, Howe-Cutkosky ellipse (at most ~0.2% optimistic at nominal values). Patch pad: equal
 load on a set of contact points, exact limit surface.
 
-Shapes: p (N,3) grasp centres; axis (N,3) or (3,) closing axes (normalized here); c (3,) CoM estimate,
+Shapes: p (N,3) grasp centers; axis (N,3) or (3,) closing axes (normalized here); c (3,) CoM estimate,
 cov (3,3) its covariance; mu, fn, a, m, accel scalars or (N,).
 """
 import numpy as np
@@ -84,11 +84,11 @@ def required_grip(d, m, mu=MU, a=A_PAD, accel=0.0, g=G, margin=1.0):
 def patch_torque_capacity(points, f_up, mu=MU, fn=FN, weights=None):
     """Largest twisting moment one pad can resist while also pushing up with f_up.
 
-    points: (K,2) contact points (x along the long axis, z up) relative to the pad centre; each carries normal
+    points: (K,2) contact points (x along the long axis, z up) relative to the pad center; each carries normal
     load n_k = fn * weights_k (equal by default) and Coulomb friction |f_k| <= mu n_k. Exact, by convex duality:
         T_max = min over c in R^2 of  sum_k mu n_k |p_k - c|  +  c_x f_up,
     where the minimizing c is the point the object turns about when it starts to slip. Any point set works
-    (full face, a line of points, off-centre patches)."""
+    (full face, a line of points, off-center patches)."""
     pts = np.asarray(points, float)
     w = np.full(len(pts), 1.0 / len(pts)) if weights is None else np.asarray(weights, float) / np.sum(weights)
     if f_up >= mu * fn * (1 - 1e-12):
@@ -159,7 +159,7 @@ def _uniform_sum_cdf(t, alpha, beta):
 def p_hold_uniform(p, axis, c0, V, half_extents, m, mu=MU, fn=FN, a=A_PAD, accel=0.0, ds=None):
     """Exact P_hold for the pre-touch prior, CoM uniform on a rectangle (no Gaussian approximation).
 
-    c0 (3,) rectangle centre; V (3,2) its two horizontal unit axes as columns; half_extents (L/2, W/2)."""
+    c0 (3,) rectangle center; V (3,2) its two horizontal unit axes as columns; half_extents (L/2, W/2)."""
     h = hinge_vector(axis)
     n = len(np.atleast_2d(p))
     mu_d = np.einsum("ij,ij->i", np.atleast_2d(c0) - np.atleast_2d(p), h)
@@ -187,4 +187,4 @@ if __name__ == "__main__":
     inner = gp[np.abs(gp[:, 1]) < 0.004]                 # the two middle rows: line-like contact on a handle
     print(f"grid pad (4x4 on 17 mm face): mean radius {np.linalg.norm(gp,axis=1).mean()*1000:.2f} mm, "
           f"d* = {patch_dstar(gp)*100:.2f} cm; two middle rows d* = {patch_dstar(inner)*100:.2f} cm; "
-          f"one off-centre row (2-D search) d* = {patch_dstar(gp[np.isclose(gp[:,1], gp[1,1])])*100:.2f} cm")
+          f"one off-center row (2-D search) d* = {patch_dstar(gp[np.isclose(gp[:,1], gp[1,1])])*100:.2f} cm")

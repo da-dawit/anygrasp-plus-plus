@@ -16,15 +16,15 @@ from .contact_rig import CONTACT, object_mu3
 from .physics import MU, A_PAD
 
 TABLE_Z = 0.0
-PICK = np.array([0.50, 0.0, TABLE_Z])     # centre of the pick area [m]
+PICK = np.array([0.50, 0.0, TABLE_Z])     # center of the pick area [m]
 CAM_W, CAM_H = 1280, 720                  # RealSense D435 depth stream used by GraspNet-1Billion
 CAM_FY = 927.37                           # GraspNet-1Billion RealSense intrinsics, fy [px]
 CAM_FOVY = float(np.degrees(2 * np.arctan(CAM_H / 2 / CAM_FY)))
-CAM_DIST = 0.65                           # camera to pick-area centre [m]
+CAM_DIST = 0.65                           # camera to pick-area center [m]
 
 
 def camera_position(tilt_deg, dist=CAM_DIST, pick=PICK):
-    """Camera on the far side of the pick area from the robot, tilt_deg off vertical, looking at the pick centre."""
+    """Camera on the far side of the pick area from the robot, tilt_deg off vertical, looking at the pick center."""
     t = np.radians(tilt_deg)
     return pick + dist * np.array([np.sin(t), 0.0, np.cos(t)])
 
@@ -46,8 +46,8 @@ def look_at(pos, target, up=(0.0, 0.0, 1.0)):
 
 
 def camera_K(w=CAM_W, h=CAM_H, fovy=CAM_FOVY):
-    """Pinhole K of a MuJoCo camera in pixel-index coords: square pixels, centred principal point, pixel (u, v)
-    centred at continuous (u + 1/2, v + 1/2)."""
+    """Pinhole K of a MuJoCo camera in pixel-index coords: square pixels, centered principal point, pixel (u, v)
+    centered at continuous (u + 1/2, v + 1/2)."""
     f = (h / 2) / np.tan(np.radians(fovy) / 2)
     return np.array([[f, 0, (w - 1) / 2], [0, f, (h - 1) / 2], [0, 0, 1.0]])
 

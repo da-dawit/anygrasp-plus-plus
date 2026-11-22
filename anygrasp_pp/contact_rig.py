@@ -17,11 +17,11 @@ FRANKA = ROOT / "assets" / "menagerie" / "franka_emika_panda"
 
 BOX_HALF = (0.10, 0.02, 0.02)   # default object half sizes [m]
 X_HIDDEN = 0.09                 # where the hidden weight sits along the long axis [m]
-PAD_CENTRE_Z = 0.0445           # pad centre along the finger's z axis (Menagerie fingertip_pad_collision_1)
-PAD_Z = 0.0584 + PAD_CENTRE_Z   # hand origin -> pad centre along the hand's z axis [m]
+PAD_CENTRE_Z = 0.0445           # pad center along the finger's z axis (Menagerie fingertip_pad_collision_1)
+PAD_Z = 0.0584 + PAD_CENTRE_Z   # hand origin -> pad center along the hand's z axis [m]
 PAD_HALF = 0.0085               # half side of the fingertip face [m] (Menagerie: 17 x 17 mm)
 PAD_FACE_Y = 0.0                # fingertip face in the finger frame (Menagerie's protruding pads end at y = 0)
-GRID_N = 4                      # grid pad: GRID_N x GRID_N points at the cell centres of the face
+GRID_N = 4                      # grid pad: GRID_N x GRID_N points at the cell centers of the face
 GRID_R = 0.0015                 # radius of each grid point sphere [m]
 
 OPEN, CLOSED = 0.04, -0.01      # grip targets (tendon length = finger position); CLOSED is past contact
@@ -43,7 +43,7 @@ DEFAULT_CONTACT = dict(solref=None, solimp=None, noslip=0)       # MuJoCo defaul
 
 
 def grid_points(n=GRID_N, half=PAD_HALF):
-    """(x, z) of the n x n cell centres on the pad face, relative to the pad centre."""
+    """(x, z) of the n x n cell centers on the pad face, relative to the pad center."""
     c = (np.arange(n) + 0.5) / n * 2 * half - half
     return np.array([(x, z) for x in c for z in c])
 
@@ -88,7 +88,7 @@ def object_mu3(pads, mu, a):
     return torsional_mu(mu, a) if pads == "point" else 1e-6
 
 
-MIDAIR_Z = 0.30                 # object centre height for mid-air grasps (gravity off until the lift)
+MIDAIR_Z = 0.30                 # object center height for mid-air grasps (gravity off until the lift)
 
 
 def _quat_mul(a, b):
@@ -105,7 +105,7 @@ def build_xml(d, grip="force", pads="grid", mu=MU, a=A_PAD, fn=FN, mass=MASS, co
 
     shape "box": size = half sizes (x, y, z); "cylinder": size = (half length, radius), axis along x.
     roll_deg rolls object and hand about the long axis, so the closing axis tilts up by roll_deg (needs midair).
-    offset: hand position from the object centre (x long axis, y closing axis, z up) [m].
+    offset: hand position from the object center (x long axis, y closing axis, z up) [m].
     midair: object starts at MIDAIR_Z, gravity only comes on at the lift.
     menagerie_friction: MuJoCo's default object friction ("Menagerie as shipped")."""
     if roll_deg and not midair:
@@ -127,24 +127,24 @@ def build_xml(d, grip="force", pads="grid", mu=MU, a=A_PAD, fn=FN, mass=MASS, co
     if shape == "box":
         hx, hy, hz = size
         geom = f'<geom name="obj" class="object" type="box" size="{hx} {hy} {hz}" mass="{m_shell}"/>'
-        z_centre = hz
+        z_center = hz
     elif shape == "cylinder":
         hl, rad = size
         geom = (f'<geom name="obj" class="object" type="cylinder" size="{rad} {hl}" quat="0.7071068 0 0.7071068 0" '
                 f'mass="{m_shell}"/>')
-        z_centre = rad
+        z_center = rad
     else:
         raise ValueError(shape)
     if midair:
-        z_centre = MIDAIR_Z
+        z_center = MIDAIR_Z
     yaw, roll = np.radians(yaw_deg), np.radians(roll_deg)
     q_roll = (np.cos(roll / 2), np.sin(roll / 2), 0.0, 0.0)                 # about world x (the long axis)
     q_obj = " ".join(f"{v:.9f}" for v in _quat_mul(q_roll, (np.cos(yaw / 2), 0.0, 0.0, np.sin(yaw / 2))))
     q_wrist = " ".join(f"{v:.9f}" for v in q_roll)
-    # pad centre sits at the object centre (+ offset): the wrist frame is rolled, the pad is PAD_Z "down" in it
+    # pad center sits at the object center (+ offset): the wrist frame is rolled, the pad is PAD_Z "down" in it
     c, s = np.cos(roll), np.sin(roll)
     pad_to_wrist = np.array([0.0, -s * PAD_Z, c * PAD_Z])                  # R_x(roll) @ (0, 0, PAD_Z)
-    hp = np.array([0.0, 0.0, z_centre]) + pad_to_wrist + np.asarray(offset, float)
+    hp = np.array([0.0, 0.0, z_center]) + pad_to_wrist + np.asarray(offset, float)
     hand_pos = f"{hp[0]:.9f} {hp[1]:.9f} {hp[2]:.9f}"
     finger = lambda name, quat: f"""
         <body name="{name}" pos="0 0 0.0584" {quat} gravcomp="1">
@@ -199,7 +199,7 @@ def build_xml(d, grip="force", pads="grid", mu=MU, a=A_PAD, fn=FN, mass=MASS, co
       </body>
       </body>
     </body>
-    <body name="obj" pos="0 0 {z_centre}" quat="{q_obj}">
+    <body name="obj" pos="0 0 {z_center}" quat="{q_obj}">
       <freejoint name="obj"/>
       {geom}
       {hidden}

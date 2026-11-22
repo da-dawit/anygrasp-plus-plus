@@ -1,4 +1,4 @@
-"""Step 1: contact calibration. Grasp a box at its centre while a hidden weight shifts the CoM by d, lift, hold,
+"""Step 1: contact calibration. Grasp a box at its center while a hidden weight shifts the CoM by d, lift, hold,
 and measure how far it turns in the hand. Compares the twist onset with the prediction for each pad setup,
 then across (mu, fn, a, m).
 
@@ -150,7 +150,7 @@ def main():
         ax1.axvspan(predict(pads, accel=A_PEAK) * 100, predict(pads) * 100, color=col, alpha=0.25)
     ax1.axhline(TWIST_DEG, color="0.5", lw=0.8, ls="--")
     ax1.text(0.2, TWIST_DEG + 1.5, f"{TWIST_DEG:.0f}$^\\circ$ = twisted out", fontsize=7, color="0.4")
-    ax1.set(xlabel="hidden CoM shift d [cm] (grasp at geometric centre)",
+    ax1.set(xlabel="hidden CoM shift d [cm] (grasp at geometric center)",
             ylabel="rotation in hand after hold [deg]\n(95 = dropped; x = resting on palm/finger)", ylim=(-3, 100))
     ax1.legend(fontsize=7, loc="upper left")
     for lab, mk, txt in (("point", "o", "point pad, 1-deg onset"), ("grid_rigid", "s", "grid rigid, 1-deg onset"),

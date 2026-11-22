@@ -5,7 +5,7 @@ RealSense D435, 1280x720).
     python gpu/example_check.py check [--rerun DIR] [--png out.png]   # stats, rerun comparison, overlay
 
 Stats over the best k grasps per detector:
-    surface distance  grasp centre t to the nearest scene point; t sits on the surface, so a few mm
+    surface distance  grasp center t to the nearest scene point; t sits on the surface, so a few mm
     approach . ray    cos between approach axis R[:,0] and the camera ray to t; > 0 = comes from the camera side,
                       the only side the camera can see
     width             predicted opening; the Panda opens to 0.08 m

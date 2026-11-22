@@ -23,7 +23,7 @@ from anygrasp_pp import scene as S  # noqa: E402
 YAWS = (0, 90, 180, 270)
 SETTLE_T = 1.0
 MAX_WIDTH = 0.08
-ON_OBJECT_Z = 0.005       # grasp centre at least this far above the table
+ON_OBJECT_Z = 0.005       # grasp center at least this far above the table
 MAX_SETTLE_MM = 5.0       # a resting pose that moves more than this in 1 s (at shift 0 or 8 cm) is not a rest
 
 

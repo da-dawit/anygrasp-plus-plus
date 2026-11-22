@@ -8,7 +8,7 @@ Final project for DA434 (Embodied Intelligence), Dawit Chun. Simulated in MuJoCo
 
 ## Midpoint results
 
-270 new scenes, 9 objects with a hidden weight that moves the centre of mass by 0-8 cm, at most 2 grasps each:
+270 new scenes, 9 objects with a hidden weight that moves the center of mass by 0-8 cm, at most 2 grasps each:
 
 | | success |
 |---|---|

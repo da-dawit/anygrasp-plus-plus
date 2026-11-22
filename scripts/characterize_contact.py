@@ -25,8 +25,8 @@ GP = grid_points()
 
 def touching_points(pad_dz=0.0, half_height=None, radius=None, tol=5e-5):
     """Pad points (x, z, pad frame) that carry load. Box: |z + dz| <= half_height. Cylinder (axis along x, dz below
-    the pad centre): only points within tol of the first one the closing fingers meet."""
-    z_obj = GP[:, 1] + pad_dz                              # point heights relative to the object centre line
+    the pad center): only points within tol of the first one the closing fingers meet."""
+    z_obj = GP[:, 1] + pad_dz                              # point heights relative to the object center line
     if radius is None:
         keep = np.ones(len(GP), bool) if half_height is None else np.abs(z_obj) <= half_height
         return GP[keep]
@@ -40,7 +40,7 @@ CASES = [  # (name, rig options, prediction points, cos(tilt), lift (h, T), note
     ("box yawed 10 deg", dict(yaw_deg=10.0), GP, 1.0, None, "fingers not square to the face"),
     ("grasp +1 cm toward the weight", dict(offset=(0.01, 0, 0)), GP, 1.0, None, "predicted: onset + 1 cm"),
     ("grasp -1 cm away from the weight", dict(offset=(-0.01, 0, 0)), GP, 1.0, None, "predicted: onset - 1 cm"),
-    ("grasp 8 mm off-centre sideways", dict(offset=(0, 0.008, 0)), GP, 1.0, None, "one finger touches first"),
+    ("grasp 8 mm off-center sideways", dict(offset=(0, 0.008, 0)), GP, 1.0, None, "one finger touches first"),
     ("grasp 5 mm high on the face", dict(offset=(0, 0, 0.005)), GP, 1.0, None, "patch still fully on the face"),
     ("thin box (1 cm tall)", dict(size=(0.10, 0.02, 0.005)), touching_points(half_height=0.005), 1.0, None,
      "only the two middle rows touch"),
