@@ -40,3 +40,9 @@ results/midpoint/videos_m3/*__agpp.mp4
 results/midpoint/videos_m3/*__retry.mp4
 results/m3_*/scenes/
 results/m3_*/cache/
+
+# kept locally, not published
+docs/decisions.md
+docs/derivations.*
+scripts/check_derivations.py
+results/**/*.tex

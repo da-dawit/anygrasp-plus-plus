@@ -52,7 +52,7 @@ For the fresh scenes, make them with `run_b0.py scenes --seeds 6:12 --out result
 - `scripts/` everything that makes a result
 - `gpu/` detector setup
 - `results/` CSVs, figures, videos
-- `docs/decisions.md` every change from the proposal and why
+- `docs/` the midpoint memo
 
 ## Credits
 

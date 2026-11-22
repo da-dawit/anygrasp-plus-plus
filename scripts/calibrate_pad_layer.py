@@ -1,7 +1,7 @@
 """Fingertip as a thin rubber layer (Winkler: each of the 4x4 pad cells is a spring k_c = E A_c / h).
 Scales the MuJoCo contact stiffness until a flat face sinks like the layer (0.161 mm at 70 N), then compares
 per-point forces and d* with the Winkler solution for flat, misaligned (1, 2, 4 deg) and R 15 mm cylinder faces,
-nothing refitted. See D20 in docs/decisions.md.
+nothing refitted.
 
     python scripts/calibrate_pad_layer.py
 Output: results/pad/layer.json
