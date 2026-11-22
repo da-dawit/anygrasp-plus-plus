@@ -76,8 +76,6 @@
 <section class="section" id="rollouts">
   <div class="container is-max-desktop">
     <h2 class="title is-3">Videos</h2>
-    <div class="content"><p>Each video shows one scene twice, B0 on the left and AnyGrasp++ on the right, played at
-      normal speed. The trials are the same ones counted in the results.</p></div>
     <video id="rollout" controls muted playsinline preload="metadata"></video>
     <p class="caption" id="rollout-caption"></p>
     <div class="chips" id="chips"></div>
@@ -105,9 +103,8 @@
 <section class="section">
   <div class="container is-max-desktop">
     <h2 class="title is-3">All development scenes</h2>
-    <div class="content"><p>Rows are shifts and columns are seeds. In each cell the left half is B0 and the right half
-      is M2's first choice (green: in the bin, red: turned in the hand, pink: other failure, gray: no reachable grasp).
-      Clicking a cell lists every grasp that was tried in that scene.</p></div>
+    <div class="content"><p>Left half B0, right half M2's first choice. Green: in the bin, red: turned in the hand,
+      pink: other failure, gray: no reachable grasp.</p></div>
     <div class="explorer-controls" id="obj-buttons"></div>
     <div class="grid-wrap"><table class="trials" id="trials"></table></div>
     <div class="detail" id="detail"></div>
@@ -117,9 +114,8 @@
 <section class="section">
   <div class="container is-max-desktop">
     <h2 class="title is-3">Objects</h2>
-    <div class="content"><p>The ten objects, chosen from 1108 scans by fixed rules: they rest stably, GSNet finds
-      grasps on them, and a core no denser than tungsten can move the CoM 8&nbsp;cm. The dots mark the CoM at the five
-      shifts. The drill only works at 1&nbsp;kg.</p></div>
+    <div class="content"><p>Picked from 1108 scans: they rest stably, GSNet finds grasps on them, and a core no
+      denser than tungsten can move the CoM 8&nbsp;cm. Dots are the CoM at each shift. The drill only works at 1&nbsp;kg.</p></div>
     <div class="gallery" id="gallery"></div>
   </div>
 </section>
@@ -130,7 +126,7 @@
       <div class="column is-5">
         <h2 class="title is-3">Depth images</h2>
         <div class="content"><p>GSNet was trained on real D435 images, so the simulated camera adds the same kinds of
-          errors. Drag the slider to compare the clean depth image with the one the detector gets.</p></div>
+          errors.</p></div>
       </div>
       <div class="column">
         <div class="compare" id="compare">
@@ -214,10 +210,7 @@ python scripts/run_m3.py --policy agpp --out results/m3_dev</pre>
   const VID = D.vdir, vid = document.getElementById("rollout"), chips = document.getElementById("chips");
   function caption(v) {
     const name = v.tag.split("__s")[0], shift = v.tag.split("__s")[1].split("__")[0];
-    let s = `${cap(nice(name))}, CoM shifted ${shift} cm. With B0 the object ${outTxt(v.left_outcome)}. `;
-    if (v.right_tries > 1) s += `AnyGrasp++ notices the first grasp slipping during the test lift, puts the object down and grasps it again; it ${outTxt(v.right_outcome)}.`;
-    else s += `AnyGrasp++ picks a different grasp, the test lift shows it holding, and the object ${outTxt(v.right_outcome)}.`;
-    return s;
+    return `${cap(nice(name))}, CoM shifted ${shift} cm.`;
   }
   function show(i, el) {
     const v = D.videos[i];
