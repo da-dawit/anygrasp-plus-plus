@@ -13,7 +13,7 @@ Final project for DA434 (Embodied Intelligence), Dawit Chun. Simulated in MuJoCo
 | | success |
 |---|---|
 | B0 (GSNet's best reachable grasp) | 33% |
-| B0 + blind retry | 42% |
+| B0 + blind retry | 41.5% |
 | AnyGrasp++ | 50% |
 
 For now the test lift uses an ideal wrist sensor. Next is reading the weight from the arm's joint torques.
