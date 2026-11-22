@@ -1,9 +1,9 @@
 """Stills for the project page:
 
-    gallery/<name>.png      each study object in its resting pose, see-through, with its centre of mass at the five
-                            hidden shifts (0, 2, 4, 6, 8 cm; white to red). The outside looks the same at every shift.
-    depth_ideal.png         the overhead camera's ideal rendered depth of one development scene
-    depth_d435.png          the same view through the RealSense D435 model the detector sees (D17)
+    gallery/<name>.png      each object in its resting pose, see-through, CoM at the five hidden shifts
+                            (0, 2, 4, 6, 8 cm; white to red). The outside looks the same at every shift.
+    depth_ideal.png         ideal overhead depth of one dev scene
+    depth_d435.png          same view through the D435 model, what the detector sees
 
     MUJOCO_GL=egl B0_MASS=0.45 python scripts/render_gallery.py --out results/midpoint
 """

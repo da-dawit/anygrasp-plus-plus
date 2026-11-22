@@ -1,24 +1,9 @@
-"""Object selection for the hidden-weight study, from all 1030 Google Scanned Objects (MuJoCo models by
-K. Zakka). Decisions D14-D16; the hidden core is derivations section H.
+"""Object selection for the hidden-weight study from the 1030 Google Scanned Objects (MuJoCo models by K. Zakka).
+stage 1 (visual meshes) -> all_objects.csv, candidates.txt; stage 2 (collision solids, hidden core, one piece,
+not footwear, not in exclusions.csv) -> solid_survey.csv, stage2_shortlist.txt. Last filter is graspability_test.py.
 
-Stage 1 (visual meshes, all objects)  -> all_objects.csv, candidates.txt
-    principal axes from area-weighted surface samples give extents L >= M >= S; 1 cm slices along the long axis
-    give the width across (M) and the height (S), assuming the object lies with S vertical.
-    candidate: length 18-45 cm and >= 4 cm of slices with across <= 8/1.2 cm and height >= 1.5 cm.
-Stage 2 (collision solids, candidates) -> solid_survey.csv, stage2_shortlist.txt
-    per object: separate pieces, hidden-core feasibility (anygrasp_pp.objects.build), graspable length on the
-    solid, collision-vs-visual fidelity. Shortlist: one piece, core feasible, >= 5 cm graspable, not footwear
-    (name pattern below; shoes are deformable) and not in exclusions.csv (reason given per object).
-The final test is scripts/graspability_test.py: resting pose stable at every shift, overhead render, detector.
-
-Criteria come from earlier decisions:
-    width rule (D14): reported width = 1.2 x thickness <= 8 cm, so across <= 6.7 cm
-    fingers close above the table: height >= 1.5 cm (17 mm pads)
-    an 8 cm shift at 1 kg needs ~9-10 cm from the centroid to the core (D11, D15, H.2): length >= 18 cm;
-    45 cm keeps the object inside the camera's view and the Panda's reach
-
-Usage:  python scripts/select_objects.py --stage 1 --models <mujoco_scanned_objects>/models
-        python scripts/select_objects.py --stage 2 --models <mujoco_scanned_objects>/models
+    python scripts/select_objects.py --stage 1 --models <mujoco_scanned_objects>/models
+    python scripts/select_objects.py --stage 2 --models <mujoco_scanned_objects>/models
 """
 import argparse
 import csv
@@ -32,13 +17,13 @@ import trimesh
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-MAX_ACROSS = 0.08 / 1.2
-MIN_HEIGHT = 0.015
-LEN_RANGE = (0.18, 0.45)
+MAX_ACROSS = 0.08 / 1.2       # reported width ~1.2 x thickness, has to be <= 8 cm
+MIN_HEIGHT = 0.015            # fingers close above the table (17 mm pads)
+LEN_RANGE = (0.18, 0.45)      # 8 cm shift at 1 kg needs ~9-10 cm centroid to core; 45 cm stays in view and reach
 MIN_GRASP_LEN_1 = 0.04        # stage 1 (surface, loose)
 MIN_GRASP_LEN = 0.05          # stage 2 (solid)
 SLICE = 0.01
-FOOTWEAR = re.compile(
+FOOTWEAR = re.compile(        # shoes are deformable
     r"shoe|boot|flat|sneaker|trainer|reebok|asics|tieks|tory_burch|ugg|timberland|teva|sperry|chukka|bahama|"
     r"angelfish|bluefish|hikerfish|_moc_|court|zig|dmx|d_rose|crazy|samoa|fyw_|adizero|enfr|top_ten|trx|"
     r"real_deal|miracle|trochilus|amberlight|climacool|pheehan|tzx|colton|martin_wedge|rayna|kamikaze|pump_omni|"
@@ -55,7 +40,7 @@ def surface_frame(mesh, n=20000, seed=0):
 
 
 def slices(local):
-    """Per 1 cm slice along the long axis: (x0, x1, across, height) in the principal frame."""
+    """(x0, x1, across, height) per 1 cm slice along the long axis; assumes the short axis ends up vertical."""
     x = local[:, 0]
     edges = np.arange(x.min(), x.max() + SLICE, SLICE)
     rows = []

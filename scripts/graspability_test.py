@@ -1,10 +1,6 @@
-"""Final object-selection test (D16): does the frozen detector give usable grasps on each candidate?
-
-    render    each candidate in its most probable resting pose that is stable at every shift, at several yaws;
-              checks in MuJoCo that it stays put for 1 s at shift 0 and 8 cm; renders the overhead depth camera
-              and saves the cloud (OpenCV frame) for detect_grasps.py
-    evaluate  converts the cached grasps to the world and keeps those that are collision-free, approach within
-              30 deg of vertical (D3), report width <= 8 cm (D14) and sit on the object (not the table)
+"""Last object-selection test: does the frozen detector give usable grasps on each candidate?
+`render` puts it in its most likely rest pose (stable at every shift, checked for 1 s) at 4 yaws and saves the
+overhead cloud; `evaluate` keeps grasps that are collision-free, <= 30 deg off vertical, <= 8 cm wide, on the object.
 
     MUJOCO_GL=egl python scripts/graspability_test.py render --names names.txt --out results/objects/gtest
     python gpu/detect_grasps.py --detector gsnet --scenes results/objects/gtest/scenes --out results/objects/gtest/cache
@@ -166,11 +162,11 @@ if __name__ == "__main__":
     ap.add_argument("--names")
     ap.add_argument("--models", default="/root/src/mujoco_scanned_objects/models")
     ap.add_argument("--collision", default="vhacd", help="convex pieces: vhacd (as scanned) or coacd")
-    ap.add_argument("--no-noise", action="store_true", help="ideal depth instead of the D435 model (I.4)")
+    ap.add_argument("--no-noise", action="store_true", help="ideal depth instead of the D435 model")
     ap.add_argument("--out", default="results/objects/gtest")
     ap.add_argument("--min-grasps", type=int, default=3)
     ap.add_argument("--detector", default="gsnet", choices=["gsnet", "baseline"])
-    ap.add_argument("--max-deg", type=float, default=30.0, help="D3 limit on the approach angle")
+    ap.add_argument("--max-deg", type=float, default=30.0, help="max approach angle from vertical (deg)")
     ap.add_argument("--cam-tilt", type=float, default=float(np.degrees(np.arctan2(0.25, 0.60))),
                     help="camera angle off vertical [deg] (render)")
     a = ap.parse_args()

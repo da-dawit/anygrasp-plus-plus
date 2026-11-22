@@ -1,18 +1,12 @@
-"""B0: the usual way of using the detector -- execute the best-scoring grasp that IK can reach (proposal; D3,
-D14, D18). One trial = one object at one hidden shift and one seed (resting pose yaw + position jitter + sensor
-noise).
+"""B0 baseline: run the best-scoring detected grasp that IK can reach. One trial = one object, one hidden CoM shift,
+one seed (rest yaw, xy jitter, sensor noise).
 
-    scenes  settle each trial's scene (arm parked out of view), render the overhead D435 (D17), save the cloud
-    run     re-create the same settled scene, pick B0's grasp from the cached detections, execute it with the
-            torque-controlled Panda, log the outcome
-
-    MUJOCO_GL=egl python scripts/run_b0.py scenes --out results/b0
+    MUJOCO_GL=egl python scripts/run_b0.py scenes --out results/b0      # settle, render overhead D435, save cloud
     python gpu/detect_grasps.py --detector gsnet --scenes results/b0/scenes --out results/b0/cache
     python scripts/run_b0.py run --out results/b0
 
-Outcome (D2, D22): success = the object ends in the bin, was not dropped, and never turned more than 10 deg in the
-hand (tilt, rotation about the approach axis excluded) from the lift to the end of the carry. Lowering it into the
-bin is placement, so contact there does not count against the grasp.
+success = ends in the bin, not dropped, and never tilted more than 10 deg in the hand (rotation about the approach
+axis doesn't count) from lift to end of carry. Bin contact while placing doesn't count against the grasp.
 """
 import argparse
 import csv
@@ -36,10 +30,10 @@ MODELS = {"gso": os.environ.get("GSO_MODELS", "/root/src/mujoco_scanned_objects/
 SEEDS = 6                # development seeds 0-5; the final comparison uses fresh seeds (--seeds)
 JITTER = 0.03            # m, uniform xy jitter of the resting position
 COLLISION = "coacd"
-MASS_KG = float(os.environ.get("B0_MASS", O.MASS))   # object mass [kg] (D15, D21)
-MAX_TILT = 10.0          # deg (D2)
-MAX_WIDTH = 0.08         # reported width (D14)
-D3_DEG = 30.0
+MASS_KG = float(os.environ.get("B0_MASS", O.MASS))   # object mass [kg]
+MAX_TILT = 10.0          # deg
+MAX_WIDTH = 0.08         # max reported grasp width [m]
+D3_DEG = 30.0            # max approach angle from straight down [deg]
 PRE = 0.10               # pre-grasp stand-off along the approach [m]
 LIFT_H, LIFT_T, HOLD_T = 0.10, 1.2, 2.0
 T_SETTLE, T_REACH, T_DESCEND, T_CONVERGE, T_CLOSE, T_SQUEEZE = 1.0, 2.5, 1.5, 1.0, 0.5, 0.5
@@ -47,15 +41,15 @@ T_UP, T_ACROSS, T_CARRY_JOINT, T_LOWER, T_RELEASE, T_RETRACT, T_AFTER = 2.0, 3.5
 RETRACT_H = 0.10         # hand moves up this far after opening, before the bin check [m]
 BIN_ABOVE = 0.40         # TCP height above the bin centre for the carry [m]
 BIN_YAWS = (0, 45, -45, 90, -90, 135, -135, 180)   # wrist turns tried for the carry [deg]
-RELEASE_CLEAR = 0.02     # lowest object point this far above the bin floor at release [m] (D22)
+RELEASE_CLEAR = 0.02     # lowest object point this far above the bin floor at release [m]
 DEPTH_ADD = float(os.environ.get("DEPTH_ADD", 0.0))   # probe: push each grasp this much deeper [m] (0 = as detected)
 TIP_CLEAR = 0.003        # the deepened fingertips stay this far above the table [m]
 FRAME_HOOK = None        # set by scripts/render_rollouts.py to record a trial; it only reads the state
 
 
 def deepened(R, t, depth):
-    """Grasp depth pushed DEPTH_ADD further along the approach, but never so deep that the lower corners of the
-    pads (17 mm wide along the grasp's height axis) come within TIP_CLEAR of the table."""
+    """Push the grasp DEPTH_ADD deeper, but keep the pad corners (17 mm along the height axis) TIP_CLEAR above the
+    table."""
     if DEPTH_ADD <= 0:
         return depth
     a, h = R[:, 0], R[:, 2]
@@ -71,7 +65,7 @@ def _phase(name):
 
 
 def feasible(r, mass=MASS_KG):
-    """Can this object hide the largest shift at this mass (D16 rule: core <= tungsten, shell >= 100 g)?"""
+    """Can this object hide the largest shift at this mass (core no denser than tungsten, shell >= 100 g)?"""
     return O.build(os.path.join(MODELS[r["source"]], r["name"]), collision=COLLISION, mass=mass)["core"] is not None
 
 
@@ -83,11 +77,11 @@ def trials(final_set, seeds=range(SEEDS)):
 
 
 def build(tr, cache={}):
-    """Model + data of one trial at its initial (unsettled) state; the object is the body 'obj'."""
+    """Model + data of one trial before settling; the object is body 'obj'."""
     import mujoco
     key = (tr["source"], tr["name"])
     if key not in cache:
-        cache.clear()                     # keep one object per worker: 128 workers caching every object ran out of memory
+        cache.clear()                     # one object per worker, 128 workers caching every object ran out of memory
         model_dir = os.path.join(MODELS[tr["source"]], tr["name"])
         ob = O.build(model_dir, collision=COLLISION, mass=MASS_KG)
         cache[key] = (model_dir, ob, S.rest_poses(ob)[0])
@@ -120,7 +114,6 @@ def settle(m, d, arm):
         mujoco.mj_step(m, d)
 
 
-# ----------------------------------------------------------------------------- scenes
 def scene_one(args):
     tr, out = args
     import mujoco
@@ -146,11 +139,10 @@ def scene_one(args):
     return tr["tag"], int(tight.sum())
 
 
-# ----------------------------------------------------------------------------- B0 grasp choice
 def choose_grasp(m, arm, scene, cache, skip=0):
-    """B0: in the detector's order (collision-free, NMS, best score first), the first grasp that passes D3 and
-    D14, sits on the object, and has IK solutions for pre-grasp, grasp, lift and above-bin. Both closing
-    directions of a grasp are tried (the hand is symmetric)."""
+    """B0's grasp: in detector order (collision-free, NMS, best score first), the first one within D3_DEG of
+    straight down, width <= MAX_WIDTH, above the table, with IK for pre-grasp, grasp, lift and above-bin. Tries
+    both closing directions (the hand is symmetric). skip=k gives the (k+1)-th such grasp."""
     import mujoco
     g = cache["grasps"]
     Rw, tw = S.grasps_to_world(g, scene["R_wc"], scene["p_wc"])
@@ -201,7 +193,7 @@ def line_qs(arm, dk, p0, p1, R, q0, n=11):
 
 
 def path_qs(arm, dk, ps, Rs, q0):
-    """IK along sampled TCP poses, warm-started point to point. Returns (qs, all converged)."""
+    """Same as line_qs for arbitrary TCP poses. Returns (qs, all converged)."""
     qs, q, ok_all = [], q0, True
     for p, R in zip(ps, Rs):
         q, ok, _, _ = arm.ik(dk, p, R, q)
@@ -211,8 +203,8 @@ def path_qs(arm, dk, ps, Rs, q0):
 
 
 def carry_path(arm, dk, p_l, R_g, R_b, q_l, n=21):
-    """Gentle carry (D22): straight up to the travel height, then straight across to above the bin, the wrist
-    turning smoothly from R_g to R_b on the way. Returns [(qs, T), ...] or None if IK fails somewhere."""
+    """Straight up to travel height, then straight across to above the bin, wrist slerping from R_g to R_b.
+    Returns [(qs, T), ...], or None if IK fails anywhere."""
     from scipy.spatial.transform import Rotation as Rot, Slerp
     p_up = np.array([p_l[0], p_l[1], S.TABLE_Z + BIN_ABOVE])
     p_b = S.BIN_CENTER + [0, 0, BIN_ABOVE]
@@ -224,7 +216,7 @@ def carry_path(arm, dk, p_l, R_g, R_b, q_l, n=21):
 
 
 def lowest_point(m, d, geoms):
-    """Exact lowest point of the object's collision geometry (its mesh vertices in the world)."""
+    """Lowest z of the object's collision meshes, exact from the vertices."""
     z = np.inf
     for g in geoms:
         if m.geom_type[g] != 7 or not (m.geom_contype[g] or m.geom_conaffinity[g]):    # 7 = mesh
@@ -236,8 +228,7 @@ def lowest_point(m, d, geoms):
 
 
 def along(qs, T, t):
-    """Joint reference (q, qd, qdd) following the IK samples qs (piecewise linear in the path parameter) with a
-    minimum-jerk timing over T."""
+    """Joint reference (q, qd, qdd) along the IK samples qs, piecewise linear, min-jerk timing over T."""
     f, fd, fdd = RB.min_jerk_scale(T, t)
     x = f * (len(qs) - 1)
     k = min(int(x), len(qs) - 2)
@@ -246,9 +237,9 @@ def along(qs, T, t):
 
 
 def contact_dstar(m, d, arm, is_obj, is_pad, ob, mass=O.MASS):
-    """This grasp's own slip distance from the pad contacts it actually made (A.12, A.5): per pad, the contact
-    points in the pad plane (x across, z up, from the TCP) weighted by their normal forces; the two pads share the
-    weight equally, so d* = (T_left(W/2) + T_right(W/2)) / W."""
+    """Slip distance d* [cm] from the pad contacts the grasp actually made. Per pad, contact points in the pad plane
+    (x across, z up, from the TCP) weighted by normal force; the pads share the weight, so
+    d* = (T_left(W/2) + T_right(W/2)) / W."""
     import mujoco
     from anygrasp_pp.rig_trial import a_peak
     tcp, R = arm.tcp_pose(d)
@@ -280,7 +271,6 @@ def contact_dstar(m, d, arm, is_obj, is_pad, ob, mass=O.MASS):
     return out
 
 
-# ----------------------------------------------------------------------------- execution
 def run_one(args):
     tr, out = args
     import mujoco
@@ -329,7 +319,7 @@ def run_one(args):
         def track():
             R_rel, p_rel = rel()
             rv = Rot.from_matrix(R_rel @ state["R0"].T).as_rotvec()
-            # hand axes: z = approach; rotation about it (squaring up) is not a failure (D2)
+            # hand z = approach; turning about it (squaring up) is not a failure
             log["tilt_max"] = max(log["tilt_max"], float(np.degrees(np.hypot(rv[0], rv[1]))))
             if log["t_tilt"] is None and log["tilt_max"] > MAX_TILT:
                 log["t_tilt"] = round(d.time, 3)
@@ -345,18 +335,17 @@ def run_one(args):
             return bool(is_pad[other].any())
 
         _phase("reach")
-        # 1. reach the pre-grasp (gripper opens on the way)
+        # gripper opens on the way
         t0 = d.time
         while d.time - t0 < T_REACH:
             q, qd, qdd = RB.min_jerk(RB.Q_CAPTURE, gr["q_pre"], T_REACH, d.time - t0)
             step(q, qd, RB.grip_ctrl_open(w_open), qdd)
         _phase("descend")
-        # 2. descend along the approach, dwell
         t0 = d.time
         while d.time - t0 < T_DESCEND:
             q, qd, qdd = along(descend, T_DESCEND, d.time - t0)
             step(q, qd, RB.grip_ctrl_open(w_open), qdd)
-        # close only once the arm is there, as a real robot's motion finishes before the grasp command
+        # close only once the arm is there, like a real robot finishing its motion before the grasp command
         t0 = d.time
         while d.time - t0 < T_CONVERGE:
             step(gr["q_g"], np.zeros(7), RB.grip_ctrl_open(w_open))
@@ -365,7 +354,7 @@ def run_one(args):
                 break
         rec["tcp_error_mm"] = float(np.linalg.norm(arm.tcp_pose(d)[0] - gr["p_g"]) * 1e3)
         _phase("close")
-        # 3. close (Franka grasp: run the target past the object; the force clamp sets 70 N per pad) and squeeze
+        # Franka-style grasp: target past the object, the force clamp sets 70 N per pad
         t0 = d.time
         while d.time - t0 < T_CLOSE + T_SQUEEZE:
             step(gr["q_g"], np.zeros(7), RB.grip_ctrl_closing(w_open, d.time - t0))
@@ -380,7 +369,6 @@ def run_one(args):
         rec["com_shift_seen_cm"] = float(tr["shift"] * 100)
         grip = RB.grip_ctrl_closing(w_open, 1e9)
         _phase("lift and hold")
-        # 4. lift, hold
         t0 = d.time
         while d.time - t0 < LIFT_T + HOLD_T:
             q, qd, qdd = along(lift, LIFT_T, d.time - t0)
@@ -389,7 +377,7 @@ def run_one(args):
                 log["pad_lost_t"] += m.opt.timestep
         rec["tilt_after_hold"] = log["tilt_max"]
         _phase("carry")
-        # 5. carry to above the bin, gently (D22): up, then across; joint-space fallback if IK fails on the path
+        # up, then across; joint-space fallback if IK fails on the path
         segs = carry_path(arm, dk, gr["p_g"] + [0, 0, LIFT_H], gr["R_g"], gr["R_b"], gr["q_l"])
         rec["carry"] = "cartesian" if segs else "joint"
         for qs_, T_ in (segs or []):
@@ -408,19 +396,19 @@ def run_one(args):
                     log["pad_lost_t"] += m.opt.timestep
         q_top = segs[-1][0][-1] if segs else gr["q_b"]
         _phase("place")
-        # 6. lower until the object's lowest point (exact, from its mesh vertices) is RELEASE_CLEAR above the floor
+        # lower until the object's lowest point is RELEASE_CLEAR above the floor
         drop = max(0.0, lowest_point(m, d, obj_geoms) - (S.TABLE_Z + RELEASE_CLEAR))
         p_b = S.BIN_CENTER + [0, 0, BIN_ABOVE]
         lower = line_qs(arm, dk, p_b, p_b - [0, 0, min(drop, BIN_ABOVE - 0.05)], gr["R_b"], q_top)
         t0 = d.time
-        while d.time - t0 < T_LOWER:        # placing: contact with the bin is not a grasp failure, so no tracking (D22)
+        while d.time - t0 < T_LOWER:        # placing: bin contact isn't a grasp failure, so no tracking
             q, qd, qdd = along(lower, T_LOWER, d.time - t0)
             step(q, qd, grip, qdd)
         t0 = d.time
         while d.time - t0 < T_RELEASE:
             step(lower[-1], np.zeros(7), RB.MAX_OPEN / 2)
         _phase("release")
-        # retract straight up with the hand open, as a robot does after letting go, then let the object settle (D22)
+        # retract straight up with the hand open, then let the object settle
         p_low = p_b - [0, 0, min(drop, BIN_ABOVE - 0.05)]
         retract = line_qs(arm, dk, p_low, p_low + [0, 0, RETRACT_H], gr["R_b"], lower[-1])
         t0 = d.time
@@ -483,7 +471,7 @@ def main():
         print(f"{len(res)} scenes; detector input points: min {min(n for _, n in res)}, "
               f"median {int(np.median([n for _, n in res]))}")
         return
-    # every finished trial is appended at once, so a crash or a killed worker loses nothing and a rerun resumes
+    # append each trial as soon as it finishes, so a killed run loses nothing and a rerun resumes
     parts = os.path.join(a.out, f"{a.cmd}_parts.jsonl")
     key = lambda r: f"{r['tag']}#{r.get('cand', 0)}"
     done = {}

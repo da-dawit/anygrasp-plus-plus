@@ -1,15 +1,6 @@
-"""Hidden-weight objects from scanned meshes (decision D16; derivations section H).
-
-The object's solid is the union of its convex collision pieces, voxelized at VOXEL. At CoM shift s the object is
-    shell: uniform density over solid \\ F, mass M - m_f(s)
-    core:  uniform density over F, mass m_f(s), where F is a fixed end cap of the solid (beyond a cut plane, with a
-           WALL-thick skin left as shell) on the object's heavy side
-Positions along the long axis e are measured from the centroid of the whole solid (the CoM at s = 0). With V_F, V_S
-the core and shell volumes, V = V_F + V_S and xF the core centroid's coordinate along e, the CoM is at s for
-    m_f(s) = M (s V_S / xF + V_F) / V                                            (H.2)
-which reduces to the uniform object (m_f = M V_F / V) at s = 0. The cut is chosen once per object, for the largest
-shift, as the outermost one for which the core stays under tungsten density and the shell keeps at least MIN_SHELL.
-The object therefore looks the same at every shift; only the hidden densities change.
+"""Hidden-weight objects from scanned meshes: voxelize the convex collision pieces, then fill one end cap with a
+dense core so the CoM moves by s along the long axis. The cap is picked once per object (for the largest shift),
+so the object looks the same at every shift and only the hidden densities change.
 """
 import glob
 import os
@@ -21,7 +12,7 @@ from scipy.spatial import ConvexHull, cKDTree
 VOXEL = 0.002            # m
 WALL = 0.002             # skin of shell material around the core [m]
 RHO_MAX = 19300.0        # tungsten [kg/m^3], the densest practical filler
-MASS = 1.0               # D15 [kg]
+MASS = 1.0               # [kg]
 SHIFTS = (0.0, 0.02, 0.04, 0.06, 0.08)
 MIN_SHELL = 0.10         # a real housing weighs something [kg]
 
@@ -78,7 +69,8 @@ def principal_frame(points):
 
 
 def core_masses(s, VF, VS, xF, M=MASS):
-    """(H.2): core mass for CoM shift s along the long axis; shell mass is M minus it."""
+    """Core mass for CoM shift s along the long axis: M (s VS / xF + VF) / V, xF measured from the solid's
+    centroid. Shell mass is M minus it."""
     return M * (s * VS / xF + VF) / (VF + VS)
 
 

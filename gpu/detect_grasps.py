@@ -1,29 +1,24 @@
 """Run a frozen grasp detector (GSNet or graspnet-baseline) once per scene and cache the result.
 
-Input: a directory of scene files <name>.npz, each with
-    points        (N,3) float32, metres, camera frame in the OpenCV convention (x right, y down, z forward).
-                  This is what the detector sees (crop it to the workspace first, as the authors do).
-    scene_points  optional (M,3) float32, same frame; used only by the collision check (default: points).
-                  Pass the full cloud including table and bin walls so grasps that hit them are flagged.
-    K             optional (3,3) camera intrinsics, kept for plotting.
+    python gpu/detect_grasps.py --detector gsnet --scenes DIR --out DIR [--shard i/n]
+
+Input: a directory of <name>.npz scenes, each with
+    points        (N,3) float32, metres, camera frame, OpenCV convention (x right, y down, z forward).
+                  What the detector sees; crop it to the workspace first like the authors do.
+    scene_points  optional (M,3) float32, same frame, only for the collision check (default: points).
+                  Pass the full cloud with table and bin walls so grasps that hit them get flagged.
+    K             optional (3,3) intrinsics, only for plotting.
 
 Output: <out_dir>/<detector>/<name>.npz with
-    grasps     (G,17) float32 rows in the graspnetAPI layout:
-               score, width, height, depth, R (9 values, row-major), t (3), object id (-1).
-               R's columns are the grasp axes: x = approach, y = closing direction, z = finger height.
-    collision  (G,) bool, True = the model-free collision check rejects the grasp.
-    order      (K,) int64, indices into grasps: collision-free, after NMS, best score first.
-    seed, n_points_in, seconds_net (network forward + decode), seconds_total.
+    grasps     (G,17) float32, graspnetAPI layout: score, width, height, depth, R (9, row-major), t (3), object id (-1).
+               columns of R are the grasp axes: x = approach, y = closing direction, z = finger height.
+    collision  (G,) bool, True = rejected by the model-free collision check.
+    order      (K,) int64 indices into grasps: collision-free, after NMS, best score first.
+    seed, n_points_in, seconds_net (forward + decode), seconds_total.
 
-Existing outputs are skipped, so the detector runs once per scene. The input point sampling is seeded
-per scene (CRC32 of the name plus --seed), so a rerun gives the same input to the network.
-
-Pipelines follow the authors' inference scripts:
-    GSNet:    graspness_unofficial/infer_vis_grasp.py (15000 points, 5 mm voxels, seed_feat_dim 512).
-    Baseline: graspnet-baseline/demo.py (20000 points, 300 views, 12 angles, 4 depths).
-    Both:     ModelFreeCollisionDetector(voxel 1 cm).detect(approach_dist 5 cm, collision_thresh 1 cm), then
-              graspnetAPI NMS (3 cm, 30 deg).
-Only one detector is loaded per process: both repos define a top-level models/graspnet.py.
+Cached scenes are skipped. Point sampling is seeded per scene (CRC32 of the name + --seed) so a rerun feeds the
+network the same input. Settings follow the authors' graspness_unofficial/infer_vis_grasp.py and
+graspnet-baseline/demo.py. Only one detector per process, since both repos have a top-level models/graspnet.py.
 """
 import argparse
 import os

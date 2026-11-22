@@ -1,8 +1,6 @@
-"""Step 1b: how the grid pad behaves when the grasp is not ideal (derivations appendix R.3).
-
-Each case changes one thing a real detector or object would change, and compares the measured slip onset (1 deg)
-and failure (10 deg) with the patch prediction, computed from the pad points that actually touch in that geometry.
-Prediction band = [onset at the lift's peak acceleration, static onset] (A.6, A.12, D.1).
+"""Step 1b: the grid pad under non-ideal grasps. Each case changes one thing a real detector or object would,
+and compares slip onset (1 deg) and failure (10 deg) with the patch prediction from the pad points that actually
+touch. Prediction band = [onset at the lift's peak acceleration, static onset].
 
     python scripts/characterize_contact.py [--contact rubber|rigid]
 Outputs: results/calib/characterize_<contact>.csv, characterize_<contact>.tex
@@ -26,9 +24,8 @@ GP = grid_points()
 
 
 def touching_points(pad_dz=0.0, half_height=None, radius=None, tol=5e-5):
-    """Pad points (pad frame: x, z) that carry load. Box of half height h: points with |z + dz| <= h.
-    Cylinder of radius r (axis along x at the pad's height minus dz): only points whose surface reach is within
-    tol of the first point the closing fingers meet."""
+    """Pad points (x, z, pad frame) that carry load. Box: |z + dz| <= half_height. Cylinder (axis along x, dz below
+    the pad centre): only points within tol of the first one the closing fingers meet."""
     z_obj = GP[:, 1] + pad_dz                              # point heights relative to the object centre line
     if radius is None:
         keep = np.ones(len(GP), bool) if half_height is None else np.abs(z_obj) <= half_height
@@ -105,7 +102,7 @@ def main():
     rows = []
     for name, rig, pts, ctilt, lift, note in CASES:
         lift_h, lift_t = lift if lift else (LIFT_H, LIFT_T)
-        m_eff = MASS * ctilt                                  # in-plane weight W cos(tilt) (A.3)
+        m_eff = MASS * ctilt                                  # only W cos(tilt) lies in the pad plane
         p0 = patch_dstar(pts, m=m_eff)
         p1 = patch_dstar(pts, m=m_eff, accel=a_peak(lift_h, lift_t))
         shift = rig.get("offset", (0, 0, 0))[0]               # grasp moved along the long axis moves the onset

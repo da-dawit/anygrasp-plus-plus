@@ -1,26 +1,13 @@
-"""AnyGrasp++ with the M3 test lift (ideal wrist sensor) and the B0 + blind retry control (D13, D26). Each scene gets
-at most N_TRIES grasps, the same for both policies.
+"""M3: grasp, 2 cm test lift (1 s up, 2 s hold) read by an ideal wrist F/T sensor, regrasp if bad. At most N_TRIES
+grasps per scene. The sensor gives mass and horizontal CoM, so the grasp's real lever arm.
 
-One try: reach, descend, close and squeeze exactly as B0 (run_b0.py), then the test lift: 2 cm up in 1 s and a 2 s
-hold (D8). The hand carries the whole object during the hold, so an ideal wrist force/torque sensor measures its
-weight W and the moment (c - p) x W about the grasp point p, which gives the mass and the horizontal position of the
-centre of mass c, and from that the grasp's lever arm about its closing axis (A.2).
+  agpp   M2 picks; keep if full weight carried and lever arm steady, else set down, re-image, pick by known-CoM model
+  retry  B0 picks; same trigger plus a sim oracle (tilt > 10 deg or drop in the test lift); regrasp = next grasp
 
-  agpp     First grasp: calibrated M2 (D23). It keeps the grasp if the hand carries the full weight and the measured
-           lever arm didn't drift during the hold (the object isn't turning), and, if TAU > 0, the known-CoM model
-           gives at least TAU at the measured lever arm. Otherwise it puts the object down, parks the arm, takes a
-           new image, runs GSNet again and regrasps with the grasp the known-CoM model likes best, using the CoM it
-           measured.
-  retry    First grasp: B0. The same test lift and the same sensor trigger, plus an oracle (the object turned more
-           than 10 deg or dropped during the test lift, read from the simulator), so the blind retry gets its best
-           chance (D13). The regrasp is the detector's first reachable grasp that isn't the one just tried.
-
-The grasp that carries the object is judged as in run_b0, with its tilt counted from its own squeeze, so turning
-during the test lift counts against a grasp that is kept anyway.
-
-New detections after a set-down come from gpu/detect_service.py through a file queue (DETQ, default /root/detq).
-DETECTOR=reuse reuses the scene's original detections instead; that is only for debugging, since the object may
-have moved.
+Outcome judged as in run_b0, tilt counted from the squeeze, so turning in the test lift counts against a kept grasp.
+Env: DETQ = file queue to gpu/detect_service.py for re-detection (default /root/detq); DETECTOR=reuse reuses the
+original detections (debug only, the object may have moved); M3_TAU > 0 also regrasps if the known-CoM model is
+below it.
 
     B0_MASS=0.45 MUJOCO_GL=egl python scripts/run_m3.py --run results/b0_m045_v2 --policy agpp --out results/m3_dev
 """
@@ -47,13 +34,13 @@ from anygrasp_pp import robot as RB  # noqa: E402
 from anygrasp_pp import scene as S  # noqa: E402
 from anygrasp_pp.rig_trial import a_peak  # noqa: E402
 
-N_TRIES = 2              # one regrasp, as in the proposal and D13
+N_TRIES = 2              # one regrasp, as in the proposal
 K_CANDS = 10             # reachable grasps considered per image
-TEST_H, TEST_T, TEST_HOLD = 0.02, 1.0, 2.0    # test lift height [m], time [s], hold [s] (D8)
-SETTLE_SKIP = 0.3        # the first part of the hold is not used for the reading [s]
+TEST_H, TEST_T, TEST_HOLD = 0.02, 1.0, 2.0    # test lift height [m], time [s], hold [s]
+SETTLE_SKIP = 0.3        # start of the hold not used for the reading [s]
 DRIFT_MM = 3.0           # lever-arm drift over the hold that counts as turning [mm]
-LIFTED_FRAC = 0.8        # the hand must carry at least this fraction of the expected weight (less: an end rests
-                         # on the table, i.e. the object has already turned)
+LIFTED_FRAC = 0.8        # hand must carry at least this much of the weight (less: one end is still on the table,
+                         # so it already turned)
 TAU = float(os.environ.get("M3_TAU", 0.0))   # also regrasp if the known-CoM model gives less than this (0 = off)
 DUP_DIST, DUP_DEG = 0.015, 30.0     # a regrasp this close to a tried grasp (centre, closing axis) is the same grasp
 T_DOWN, T_OPEN, T_BACK, T_PARK, T_REST = 1.0, 0.5, 0.8, 2.5, 1.0
@@ -63,9 +50,8 @@ FRAME_HOOK = None        # set by scripts/render_plain.py to film a trial; it on
 _MODELS = {}
 
 
-# ----------------------------------------------------------------------------- the two learned scores (D23, D26)
 def known_design(rows):
-    """Features with the CoM known (from the test lift): the lever arm about the true CoM replaces the visible one."""
+    """M2 features with the CoM known: lever arm about the known CoM instead of the shape-based one."""
     X = []
     for f in rows:
         ds, d = 100 * float(f["dstar_pred"]), float(f["d_known_cm"])
@@ -75,8 +61,8 @@ def known_design(rows):
 
 
 def models(dev_run, hold_out):
-    """(M2, known-CoM) logistic models fitted on the development candidates, leaving out `hold_out` (the scene's
-    object, when the scene is a development scene) so no model ever ranks an object it was fitted on."""
+    """(M2, known-CoM) logistic models fit on the dev candidates minus object `hold_out`, so a model never ranks an
+    object it was trained on."""
     key = (dev_run, hold_out)
     if key not in _MODELS:
         F = [f for f in csv.DictReader(open(os.path.join(dev_run, "candidates_features.csv"))) if f["name"] != hold_out]
@@ -87,7 +73,6 @@ def models(dev_run, hold_out):
     return _MODELS[key]
 
 
-# ----------------------------------------------------------------------------- one trial
 class Trial:
     def __init__(self, tr, run, out, hook=None):
         import mujoco
@@ -111,7 +96,7 @@ class Trial:
         self.f6 = np.zeros(6)
         self.tau_sat = 0
 
-    # --- low level, as in run_b0.run_one
+    # step/rel/track as in run_b0.run_one
     def step(self, q, qd, grip, qdd=None):
         self.arm.control(self.d, q, qd, qdd)
         self.d.ctrl[self.arm.grip] = grip
@@ -146,7 +131,7 @@ class Trial:
         log["finger_body"] |= bool(self.is_finger[other].any())
 
     def hand_wrench(self, p):
-        """Ideal wrist force/torque sensor: total force the hand applies to the object and its moment about p (world)."""
+        """Ideal wrist F/T sensor: total force of the hand on the object and its moment about p, world frame."""
         F, T = np.zeros(3), np.zeros(3)
         d = self.d
         for i in range(d.ncon):
@@ -164,7 +149,7 @@ class Trial:
         return F, T
 
     def capture(self, name):
-        """New overhead D435 image with the arm parked (as run_b0.scene_one), saved as a scene file."""
+        """New overhead D435 image with the arm parked, saved as a scene file like run_b0.scene_one."""
         mj = self.mj
         opt = mj.MjvOption()
         opt.geomgroup[:] = [1, 0, 1, 0, 0, 0]
@@ -203,7 +188,7 @@ class Trial:
         shutil.copy(res, os.path.join(self.out, "cache", name + ".npz"))
         return out
 
-    # --- grasp candidates and their features (eval_rerank.features, computed on the planned grasp)
+    # features as in eval_rerank.features, but on the planned grasp
     def candidates(self, scene, cache, mass, c_known=None, exclude=()):
         pts = M2.object_points(scene["points"] @ scene["R_wc"].T + scene["p_wc"])
         if len(pts) < 10:
@@ -228,7 +213,7 @@ class Trial:
             out.append(f)
         return out
 
-    # --- one grasp: approach, close, test lift; returns the reading
+    # approach, close, test lift; returns the sensor reading
     def grasp_and_test(self, gr, q_start):
         d, arm = self.d, self.arm
         a = gr["R_g"][:, 2]
@@ -262,7 +247,6 @@ class Trial:
         log["pads_on_object"] = int(self.is_pad[np.where(self.is_obj[g1], g2, g1)[touch]].sum())
         tcp, Rt = arm.tcp_pose(d)
         log["lever_arm_cm"] = float(abs(P.lever_arm(tcp, Rt[:, 1], d.xipos[self.obj])[0]) * 100)
-        # test lift: 2 cm up, 2 s hold, reading the ideal wrist sensor
         self.phase("test lift")
         grip = RB.grip_ctrl_closing(w_open, 1e9)
         up = B.line_qs(arm, self.dk, gr["p_g"], gr["p_g"] + [0, 0, TEST_H], gr["R_g"], gr["q_g"])
@@ -317,7 +301,7 @@ class Trial:
             self.step(RB.Q_CAPTURE, np.zeros(7), 0.04)
 
     def transport(self, res):
-        """Lift the rest of the way, hold, carry, place and judge, as run_b0.run_one."""
+        """Lift the rest of the way, hold, carry, place and judge, as in run_b0.run_one."""
         d, arm, gr, log = self.d, self.arm, res["gr"], res["log"]
         grip = RB.grip_ctrl_closing(res["w_open"], 1e9)
         self.phase("lift and hold")

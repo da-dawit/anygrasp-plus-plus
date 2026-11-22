@@ -1,11 +1,6 @@
-"""Midpoint numbers: every re-ranking policy scored on the executed candidates (D22, D23), with 95% intervals from
-an object-clustered bootstrap (D10), plus the "B0 + blind retry" control the proposal feedback asked for (D13).
-
-The retry rows are upper bounds for a single retry: the trigger is an oracle (any failure of the first grasp), and the
-second grasp is scored on the undisturbed scene, while in a real retry the object has been lifted and set down
-first. The same rule is applied to B0 and to calibrated M2, so the two retry rows compare like with like.
-
-Also writes the per-scene data behind the project page's trial explorer and picks the scenes for the rollout videos.
+"""Midpoint numbers: each re-ranking policy on the executed candidates, 95% CI from an object bootstrap, plus the
+B0 + blind retry control. Retry rows are upper bounds (oracle trigger, 2nd grasp scored on the undisturbed scene).
+Also writes explorer.json for the project page and video_picks.json for the rollout videos.
 
     python scripts/midpoint_results.py --run results/b0_m045_v2 --out results/midpoint
 """
@@ -25,7 +20,7 @@ N_BOOT = 4000
 
 
 def loo_scores(F, X, y):
-    """Calibrated M2's success probability for each candidate, from a model that never saw that object."""
+    """Calibrated M2 probability per candidate, from a model that never saw that object."""
     objs = np.array([f["name"] for f in F])
     p = np.zeros(len(F))
     for o in sorted(set(objs)):
@@ -128,9 +123,8 @@ def main():
                              m2=max(c, key=cal)["cand"] if c else None))
     json.dump(explorer, open(os.path.join(a.out, "explorer.json"), "w"), separators=(",", ":"))
 
-    # rollout videos, one scene per object: B0 turned in the hand at a 6-8 cm shift and calibrated M2's choice held;
-    # else B0 failed at any shift and M2 held; else both held at the largest shift. Plus two scenes where both
-    # failed, so the page doesn't only show wins.
+    # rollout videos, one scene per object: B0 turned in hand at 6-8 cm and M2 held, else B0 failed and M2 held,
+    # else both held at the largest shift. plus two where both failed so the page doesn't only show wins
     L, R = "B0: the detector's top grasp", "M2 (prototype): re-ranked grasp"
     picks, fails = {}, []
     def rank(e, b0, m2):

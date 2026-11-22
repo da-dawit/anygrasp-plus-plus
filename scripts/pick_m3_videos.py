@@ -1,6 +1,5 @@
-"""Scenes for the B0 vs AnyGrasp++ videos: per object, one where B0's grasp failed and AnyGrasp++ succeeded after
-noticing a slip in its test lift and regrasping (else one where it succeeded with its first grasp), preferring larger
-shifts; plus one scene where AnyGrasp++ failed as well.
+"""Picks scenes for the B0 vs AnyGrasp++ videos: per object, one where B0 failed and AnyGrasp++ succeeded after a
+regrasp (else on its first grasp), larger shifts first, plus one where AnyGrasp++ failed too.
 
     python scripts/pick_m3_videos.py --m3 results/m3_dev --cands results/b0_m045_v2 --out results/midpoint/m3_video_picks.json
 """

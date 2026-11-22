@@ -1,8 +1,8 @@
-"""Detector service for trials that need a new detection in the middle of a trial (the M3 regrasp, D26).
+"""Detector service for trials that need a new detection mid-trial (the M3 regrasp).
 
-Watches <queue>/in for scene .npz files (the format run_b0.py writes), runs the detector exactly as detect_grasps.py
-does, and writes the cache file to <queue>/out/<name>.npz. Several copies can share one queue: each claims a file by
-renaming it into <queue>/work first.
+Watches <queue>/in for scene .npz files (the format run_b0.py writes), runs the detector the same way as
+detect_grasps.py, and writes the cache file to <queue>/out/<name>.npz. Several copies can share one queue, each
+claims a file by renaming it into <queue>/work first.
 
     python gpu/detect_service.py --detector gsnet --queue /root/detq      # run 4-6 of these in the background
 """

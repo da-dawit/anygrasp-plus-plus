@@ -24,8 +24,6 @@
           <span class="icon"><i class="fab fa-github"></i></span><span>Code</span></a></span>
         <span class="link-block"><a href="https://github.com/da-dawit/anygrasp-plus-plus/blob/main/docs/decisions.md" class="button is-normal is-rounded is-dark">
           <span class="icon"><i class="fas fa-list"></i></span><span>Decision log</span></a></span>
-        <span class="link-block"><a href="../docs/derivations.pdf" class="button is-normal is-rounded is-dark">
-          <span class="icon"><i class="fas fa-file-pdf"></i></span><span>Derivations</span></a></span>
       </div>
     </div>
   </div>
@@ -169,15 +167,15 @@
       <pre class="cmd">conda create -n da434 python=3.12 &amp;&amp; conda activate da434
 pip install -r requirements.txt
 bash scripts/setup_assets.sh
-python scripts/check_derivations.py
 
-# GPU machine (see README): detector setup, scenes, detections, then the trials
+# on the GPU machine (see the README for the GSNet weights)
 bash gpu/setup_gpu.sh
-B0_MASS=0.45 MUJOCO_GL=egl python scripts/run_b0.py scenes --out results/b0_m045_v2
+export B0_MASS=0.45
+MUJOCO_GL=egl python scripts/run_b0.py scenes --out results/b0_m045_v2
 python gpu/detect_grasps.py --detector gsnet --scenes results/b0_m045_v2/scenes --out results/b0_m045_v2/cache
-B0_MASS=0.45 python scripts/run_b0.py run --out results/b0_m045_v2
+python scripts/run_b0.py run --out results/b0_m045_v2
 python gpu/detect_service.py --queue /root/detq &amp;
-B0_MASS=0.45 python scripts/run_m3.py --policy agpp --out results/m3_dev</pre>
+python scripts/run_m3.py --policy agpp --out results/m3_dev</pre>
     </div>
   </div>
 </section>

@@ -1,9 +1,5 @@
-"""Figures for the midpoint memo and the project page, from committed results.
-
-    fig_methods.png   success of each method, development scenes (held-out objects) and fresh scenes, 95% CI
-    fig_shift.png     success vs the hidden CoM shift
-    fig_physics.png   held through lift and hold vs |d| / d* of each grasp's own contact patch
-    fig_failure.png   contact points and per-grasp d* with the step-1 pad and the rubber-layer pad (D19, D20)
+"""Midpoint / project page figures from the committed results.
+Writes fig_methods.png, fig_shift.png, fig_physics.png (held vs |d|/d*) and fig_failure.png (step-1 vs rubber pad).
 
     python scripts/make_figures.py --out results/midpoint
 """
@@ -47,7 +43,7 @@ def m3_rows(path):
 
 
 def methods(out, m3_dirs):
-    """Bars: B0, B0 + blind retry, M2, AnyGrasp++ (M2 + M3), best of the executed grasps; dev and fresh scenes."""
+    """Success bars per method, dev and fresh scenes."""
     groups = []
     for label, pol_file, m3 in (("development scenes\n(objects held out)", "policies.json", m3_dirs.get("dev")),
                                 ("fresh scenes", "policies_fresh.json", m3_dirs.get("fresh"))):
@@ -145,7 +141,7 @@ def physics(out):
 
 
 def all_contacts(path):
-    """D19's counting: every trial with a measured lever arm, including grasps where one pad never touched."""
+    """Every trial with a measured lever arm, including grasps where one pad never touched."""
     g = [r for r in rows(path) if r.get("lever_arm_cm") not in ("", None)]
     ds = np.array([float(r["dstar_lift_cm"] or 0) for r in g])
     ratio = np.array([float(r["lever_arm_cm"]) for r in g]) / np.maximum(ds, 1e-9)

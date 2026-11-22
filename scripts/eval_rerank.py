@@ -1,16 +1,6 @@
-"""Offline evaluation of re-ranking policies on executed candidates (D22).
-
-`run_b0.py candidates` executes every scene's first K reachable grasps (detector order), so each policy that picks
-one of those K grasps can be scored exactly with the recorded outcome of the grasp it picks. Policies:
-
-    B0              the first reachable grasp (the detector's choice)
-    centre          the grasp closest to the visible centre of the object (lever arm about the closing axis)
-    M2              detector score x P(hold), CoM uniform over the visible footprint (C.5), d* from the virtual
-                    squeeze of the cloud (C.6)
-    M2, known CoM   P(hold) with the true CoM (what M2 could do after an ideal M3 test lift)
-    oracle          success if any of the K grasps succeeded (the ceiling for re-ranking these K)
-
-This is the development set (seeds 0-5). The final comparison uses fresh seeds.
+"""Offline scoring of re-ranking policies on the dev set (seeds 0-5). `run_b0.py candidates` already ran each
+scene's first K reachable grasps, so a policy is scored by the recorded outcome of the one it picks.
+Policies: B0, centre, M2 (score x P(hold)), M2 with the true CoM (ideal M3), oracle. Writes candidates_features.csv.
 
     python scripts/eval_rerank.py --run results/b0_m045
 """

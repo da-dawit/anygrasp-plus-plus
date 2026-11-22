@@ -1,11 +1,6 @@
-"""Collision pieces by CoACD (Wei et al., SIGGRAPH 2022), the same settings for every object, written to
-<model_dir>/coacd/model_collision_<k>.obj with the settings in coacd/params.json.
-
-Why: the scanned library's V-HACD pieces bulge a median 6.7 mm beyond the visible surface (D16), enough to put
-the fingers on material the camera cannot see. CoACD follows concave shapes much more closely.
-
-Settings: concavity threshold 0.04 (smaller = more faithful, more pieces), no cap on the number of pieces,
-manifold preprocessing when needed, seed 0. Pieces under 1 mm^3 are dropped (MuJoCo rejects degenerate meshes).
+"""CoACD collision pieces (Wei et al., SIGGRAPH 2022), same settings for every object, written to
+<model_dir>/coacd/model_collision_<k>.obj plus coacd/params.json. The scanned V-HACD pieces bulge ~6.7 mm (median)
+past the visible surface, enough to put the fingers on material the camera can't see.
 
     python scripts/make_collision.py --models <dir> --names list.txt [--jobs 64]
 """
@@ -15,10 +10,11 @@ import os
 import time
 from multiprocessing import Pool
 
+# threshold: smaller = more faithful, more pieces
 PARAMS = dict(threshold=0.04, max_convex_hull=-1, preprocess_mode="auto", preprocess_resolution=50,
               resolution=2000, mcts_nodes=20, mcts_iterations=150, mcts_max_depth=3, pca=False, merge=True,
               seed=0)
-MIN_VOLUME = 1e-9   # m^3
+MIN_VOLUME = 1e-9   # m^3, MuJoCo rejects degenerate pieces
 
 
 def run_one(model_dir):

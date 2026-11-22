@@ -8,7 +8,7 @@ from .contact_rig import build_xml, grip_target, OPEN
 T_SETTLE, T_CLOSE, T_SQUEEZE = 0.3, 0.5, 0.5     # [s]
 T_GRAVITY = 0.5                                   # mid-air grasps: gravity ramps in over this time [s]
 LIFT_H, LIFT_T, HOLD_T = 0.10, 1.2, 1.5           # [m], [s], [s]
-TWIST_DEG = 10.0                                  # tilt in the hand that counts as twisted out (decisions D2)
+TWIST_DEG = 10.0                                  # tilt in the hand that counts as twisted out
 MONITOR_EVERY = 5                                 # contact monitoring stride [steps]
 
 
@@ -18,7 +18,7 @@ def min_jerk(tau):
 
 
 def a_peak(lift_h=LIFT_H, lift_t=LIFT_T):
-    """Peak acceleration of the min-jerk lift (derivations D.1)."""
+    """Peak acceleration of the min-jerk lift [m/s^2]."""
     return 10 * np.sqrt(3) / 3 * lift_h / lift_t**2
 
 
@@ -84,10 +84,9 @@ def run_trial(shift, lift_h=LIFT_H, lift_t=LIFT_T, hold_t=HOLD_T, twist_deg=TWIS
         return Rh.T @ Rb, Rh.T @ (d.xpos[obj] - d.xpos[hand])
 
     def rot_in_hand(R0):
-        """Rotation of the object relative to the hand since R0, as a rotation vector in the HAND frame
-        (x: along the object, y: closing axis, z: approach). Returns (tilt, squaring, total) in degrees:
-        tilt = rotation away from the approach axis (twist about the closing axis + tilt in the finger plane),
-        squaring = rotation about the approach axis (the object lining up with the fingers; harmless)."""
+        """Object rotation in the hand since R0, as a rotvec in the hand frame (x along the object, y closing,
+        z approach). Returns (tilt, squaring, total) in deg. tilt = away from the approach axis (the twist that
+        matters), squaring = about the approach axis (object lining up with the fingers, harmless)."""
         rv = np.degrees(Rot.from_matrix(rel_pose()[0] @ R0.T).as_rotvec())
         return np.hypot(rv[0], rv[1]), abs(rv[2]), np.linalg.norm(rv)
 

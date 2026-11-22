@@ -1,9 +1,5 @@
-"""Plain rollout videos for the project page: the same trials as the logs, filmed from one fixed camera with a
-neutral floor and background (visual only; the physics and the detector's depth image are unchanged) and a small
-label, nothing else. Two policies on the same scene are put side by side.
-
-    left/right   b0            B0's grasp (run_b0.run_one)
-                 agpp | retry  AnyGrasp++ or B0 + blind retry, with the test lift (run_m3.run_trial)
+"""Plain rollout videos for the project page: same trials as the logs, one fixed camera, plain floor and sky, a
+small label. Two policies on one scene side by side; left/right are b0 (run_b0.run_one) or agpp/retry (run_m3).
 
     MUJOCO_GL=egl B0_MASS=0.45 python scripts/render_plain.py --run results/b0_m045_v2 \
         --pairs results/midpoint/m3_video_picks.json --out results/midpoint/videos_m3

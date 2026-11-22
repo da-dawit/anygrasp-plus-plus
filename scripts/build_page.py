@@ -1,5 +1,4 @@
-"""Builds page/index.html from page/template.html by embedding the results it shows (the page then opens straight
-from the file system, no server needed).
+"""Builds page/index.html from page/template.html with the results embedded, so it opens from disk, no server.
 
     python scripts/build_page.py
 """

@@ -1,5 +1,5 @@
-"""Contact sheet of candidate objects (visual mesh with texture), rendered headless with MuJoCo.
-The heavy end chosen by anygrasp_pp.objects is marked with a red dot at the core centroid.
+"""Contact sheet of candidate objects (textured visual mesh), rendered headless with MuJoCo.
+Red dot = centroid of the heavy core picked by anygrasp_pp.objects.
 
 Usage (Linux with EGL):  MUJOCO_GL=egl python scripts/render_candidates.py --models <dir> --names list.txt --out sheet.png
 """

@@ -1,13 +1,6 @@
-"""Midpoint analysis of the B0 trials (proposal: Minimum tier; derivations G.3, G.4).
-
-    success by shift and by object, outcome counts
-    B0 success with no shift (proposal criterion: >= 80%)
-    failure point: success vs the true lever arm d at the grasp (|d|, cm), logistic P = 1/(1+exp(k(d-d50))) with
-    k bounded (simulated outcomes are nearly separable, G.4), d50 with a 95% bootstrap interval resampled by
-    object (G.3); compared with the slip distance d* predicted before any trial (A.12, D15)
-
-Trials where the hand never gripped the object (blocked on approach, closed on air, no reachable grasp) have no
-meaningful lever arm; they count as B0 failures in the success rates but are left out of the d50 fit.
+"""B0 midpoint numbers: success by shift and object, and the lever arm d50 where grasps start failing
+(logistic fit, object bootstrap CI), compared with the predicted slip distance d*.
+No-grip trials count as failures in the rates but have no lever arm, so they're left out of the fit.
 
     python scripts/analyze_b0.py --trials results/b0/trials.csv --out results/b0
 """
@@ -27,7 +20,7 @@ from anygrasp_pp.contact_rig import grid_points  # noqa: E402
 from anygrasp_pp.rig_trial import a_peak  # noqa: E402
 
 K_MAX = 50.0      # 1/cm: logistic slope bound (a 10-90% width of 0.09 cm, finer than the shift steps)
-MASS = float(os.environ.get("B0_MASS", 1.0))   # object mass of the run [kg] (D15, D21)
+MASS = float(os.environ.get("B0_MASS", 1.0))   # object mass of the run [kg]
 
 
 def fit_d50(d, y):
@@ -98,7 +91,7 @@ def main():
           f"proposal criterion: within 1.5 cm")
     if len(hold) and len(fail):
         print(f"largest lever arm that held: {hold.max():.2f} cm; smallest that failed: {fail.min():.2f} cm")
-    # each grasp's own slip distance, from the pad contacts it made (A.12; D19): does |d| < d*_grasp predict holding?
+    # each grasp's own slip distance from the pad contacts it made: does |d| < d*_grasp predict holding?
     has = [r for r in gripped if r.get("dstar_lift_cm") not in ("", None) and float(r["dstar_lift_cm"]) > 0]
     ratio = np.array([float(r["lever_arm_cm"]) / float(r["dstar_lift_cm"]) for r in has])
     held = np.array([float(float(r["tilt_after_hold"]) <= 10.0) for r in has])

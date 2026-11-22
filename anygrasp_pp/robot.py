@@ -1,12 +1,6 @@
-"""The Franka Panda for the study: Menagerie's arm and hand (pinned commit) with the step-1 hand physics and a
-torque-controlled arm (decisions D4-D7, D12, D18; derivations D.1, D.2, J).
-
-    pads      Menagerie's five pad boxes are replaced by the 4x4 rubber grid over the 17 x 17 mm fingertip (D4)
-    gripper   force-clamped servo, 70 N per pad (D7), commanded like Franka's grasp(width, speed, force)
-    arm       7 torque motors with the Panda's limits (87 N m joints 1-4, 12 N m joints 5-7). The controller is
-              joint impedance (libfranka's example gains) + the arm model's gravity and Coriolis torques, like the
-              real robot: it knows the arm and hand, not the payload. No gravcomp on the links (D12), so the joint
-              torques carry the payload's weight for M3.
+"""Franka Panda for the study: Menagerie arm and hand (pinned commit) with the 4x4 rubber grid pads, the 70 N
+force-clamped gripper and 7 torque motors at the Panda's limits (87 N m joints 1-4, 12 N m joints 5-7).
+No gravcomp on the links, so the joint torques carry the payload's weight (M3 reads it from them).
 """
 import xml.etree.ElementTree as ET
 
@@ -78,9 +72,8 @@ class Panda:
         d.qvel[self.dadr] = 0.0
 
     def control(self, d, q_ref, qd_ref, qdd_ref=None):
-        """Computed-torque feedforward + joint impedance (J.1): tau = M(q) qdd_ref + c(q, qd) + g(q)
-        + KP (q_ref - q) + KD (qd_ref - qd), clipped to the motor limits. M, c and g are the arm-and-hand model's
-        (the object is a separate body, so the controller does not know the payload)."""
+        """tau = M(q) qdd_ref + c(q, qd) + g(q) + KP (q_ref - q) + KD (qd_ref - qd), clipped to the motor limits.
+        M, c, g come from the arm-and-hand model only, so like the real robot it doesn't know the payload."""
         q, qd = d.qpos[self.qadr], d.qvel[self.dadr]
         tau = KP * (q_ref - q) + KD * (qd_ref - qd) + d.qfrc_bias[self.dadr]
         if qdd_ref is not None:
@@ -95,7 +88,7 @@ class Panda:
         return d.site_xpos[self.tcp].copy(), d.site_xmat[self.tcp].reshape(3, 3).copy()
 
     def ik(self, dk, p_t, R_t, q0, iters=300, tol_p=1e-4, tol_r=np.radians(0.2)):
-        """Damped least squares on the TCP site (D.2), joint limits enforced. dk: a scratch MjData.
+        """Damped least squares IK on the TCP site, joint limits enforced. dk: a scratch MjData.
         Returns (q, ok, position error, orientation error)."""
         m = self.m
         dk.qpos[:] = 0
@@ -122,7 +115,7 @@ class Panda:
 
 
 def min_jerk_scale(T, t):
-    """Minimum-jerk time scaling (D.1): s(t), s'(t), s''(t) for 0 <= t <= T, held at the ends."""
+    """Minimum-jerk time scaling: s(t), s'(t), s''(t) for 0 <= t <= T, held at the ends."""
     u = np.clip(t / T, 0.0, 1.0)
     inside = 0.0 < t < T
     f = 10 * u ** 3 - 15 * u ** 4 + 6 * u ** 5
@@ -132,16 +125,16 @@ def min_jerk_scale(T, t):
 
 
 def min_jerk(q0, q1, T, t):
-    """Joint position, velocity and acceleration on the minimum-jerk path from q0 to q1 in time T (D.1)."""
+    """Position, velocity, acceleration on the min-jerk path from q0 to q1 in time T."""
     f, fd, fdd = min_jerk_scale(T, t)
     q0, q1 = np.asarray(q0), np.asarray(q1)
     return q0 + (q1 - q0) * f, (q1 - q0) * fd, (q1 - q0) * fdd
 
 
 def grasp_to_tcp(R_w, t_w, depth):
-    """GraspNet grasp (world rotation with columns approach, closing, height; centre t on the object surface;
-    fingertip depth past t) -> Panda TCP target (J.2): pad centre = t + approach * (depth - PAD_HALF), hand z =
-    approach, hand y = closing direction. Returns (position, rotation)."""
+    """GraspNet grasp -> Panda TCP target (position, rotation). R_w columns = approach, closing, height; t_w on
+    the object surface; depth = fingertip depth past t_w. Pad centre = t + approach * (depth - PAD_HALF), hand
+    z = approach, hand y = closing."""
     a, c = R_w[:, 0], R_w[:, 1]
     R = np.stack([np.cross(c, a), c, a], axis=1)
     return t_w + a * (depth - PAD_HALF), R
@@ -153,7 +146,6 @@ def grip_ctrl_open(width):
 
 
 def grip_ctrl_closing(w0, t):
-    """Closing target t seconds after the close command, from opening w0. Each finger's target moves at
-    CLOSE_SPEED, exactly as in the step-1 calibration (contact_rig.grip_target), and runs past contact to CLOSED
-    so the force clamp sets 70 N per pad."""
+    """Closing target t s after the close command, from opening w0. Same as contact_rig.grip_target: moves at
+    CLOSE_SPEED and runs past contact to CLOSED so the force clamp sets 70 N per pad."""
     return max(w0 / 2 - CLOSE_SPEED * t, CLOSED)

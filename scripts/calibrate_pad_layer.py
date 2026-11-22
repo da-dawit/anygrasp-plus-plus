@@ -1,18 +1,10 @@
-"""The fingertip as a thin rubber layer (decisions D20; derivations B.6).
-
-Winkler model of a thin layer (thickness h, Young's modulus E) on a rigid finger: each cell of the 4x4 pad grid,
-area A_c = (2 PAD_HALF / 4)^2, is an independent linear spring k_c = E A_c / h. Against a surface whose gap to
-the pad face is s_i at cell i, the cells sink delta_i = max(0, delta0 - s_i), and delta0 is set by the squeeze
-force F = sum_i k_c delta_i.
-
-MuJoCo side: with a constant impedance d (solimp d d) and a direct stiffness K (solref -K -b), each contact point
-behaves in equilibrium as a linear spring of stiffness K / ((1-d) A_ii) (B.5), A_ii being the contact's inverse
-inertia, dominated here by the finger (its armature). This script
-  1. measures A_ii-weighted stiffness and sets k so a flat face sinks like the layer (0.161 mm at 70 N);
-  2. compares, with nothing refitted, the per-point forces against the Winkler solution for a flat face, faces
-     misaligned by 1, 2 and 4 deg, and a 15 mm radius cylinder, and the resulting twist capacity d* (A.12).
+"""Fingertip as a thin rubber layer (Winkler: each of the 4x4 pad cells is a spring k_c = E A_c / h).
+Scales the MuJoCo contact stiffness until a flat face sinks like the layer (0.161 mm at 70 N), then compares
+per-point forces and d* with the Winkler solution for flat, misaligned (1, 2, 4 deg) and R 15 mm cylinder faces,
+nothing refitted. See D20 in docs/decisions.md.
 
     python scripts/calibrate_pad_layer.py
+Output: results/pad/layer.json
 """
 import json
 import os
@@ -36,7 +28,7 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "results", 
 
 
 def winkler(gaps, F=FN, k=K_CELL):
-    """Per-cell forces of a Winkler layer pressed against gaps s_i with total force F (bisection on delta0)."""
+    """Per-cell forces for gaps s_i and total squeeze F; bisects on the common sink delta0."""
     gaps = np.asarray(gaps, float)
     lo, hi = gaps.min(), gaps.min() + F / k + 1e-3
     for _ in range(200):
@@ -54,7 +46,7 @@ def contact_setting(k_acc, d=D_IMP):
 
 
 def squeeze(contact, shape="box", size=(0.10, 0.02, 0.02), yaw_deg=0.0, fixed=True, t_end=1.6):
-    """Close the force gripper (70 N per pad) on the object; returns the left pad's contacts as
+    """Close the gripper (70 N per pad) on the object. Returns the left pad's contacts as
     (x, z, penetration, normal force) in the pad frame, sorted by x then z."""
     xml = build_xml(0.0, contact=contact, shape=shape, size=size, yaw_deg=yaw_deg, midair=True, mass=1.0)
     if fixed:
@@ -121,8 +113,8 @@ def main():
     m0 = squeeze(CONTACT)
     print(f"  flat face: {len(m0)} contacts, mean sink {m0[:, 2].mean() * 1e3:.3f} mm, per-point stiffness "
           f"{(m0[:, 3] / np.maximum(m0[:, 2], 1e-12)).mean():.0f} N/m")
-    # calibrate: per-point stiffness is linear in k_acc at constant impedance
-    # calibrate in the study's condition (a free 1 kg object); per-point stiffness is linear in k_acc
+    # calibrate on a free 1 kg object like in the study; at constant impedance the per-point stiffness is
+    # linear in k_acc, so just rescale a few times
     k_acc = 2.0e4
     for _ in range(5):
         meas = squeeze(contact_setting(k_acc), fixed=False)

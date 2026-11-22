@@ -1,5 +1,5 @@
-"""Step-2 scene pieces: scanned objects with hidden cores, the table, the overhead depth camera, and the
-camera <-> world conversions the detector needs (derivations section I).
+"""Scene pieces: scanned objects with hidden cores, table, bin, the overhead D435 camera and its depth noise,
+and the camera <-> world conversions the detector needs.
 
 Frames
     world:  robot base at the origin, table top at z = TABLE_Z, x away from the robot
@@ -46,21 +46,20 @@ def look_at(pos, target, up=(0.0, 0.0, 1.0)):
 
 
 def camera_K(w=CAM_W, h=CAM_H, fovy=CAM_FOVY):
-    """Pinhole intrinsics of a MuJoCo camera in pixel-index coordinates (I.1): square pixels, centred principal
-    point, pixel (u, v) centred at continuous coordinate (u + 1/2, v + 1/2)."""
+    """Pinhole K of a MuJoCo camera in pixel-index coords: square pixels, centred principal point, pixel (u, v)
+    centred at continuous (u + 1/2, v + 1/2)."""
     f = (h / 2) / np.tan(np.radians(fovy) / 2)
     return np.array([[f, 0, (w - 1) / 2], [0, f, (h - 1) / 2], [0, 0, 1.0]])
 
 
 def R_world_cv(x_cam, y_cam):
-    """Rotation from the OpenCV camera frame to the world (I.1): columns x_cv = x_cam, y_cv = -y_cam,
-    z_cv = -z_cam = forward."""
+    """OpenCV camera frame -> world rotation. Columns x_cv = x_cam, y_cv = -y_cam, z_cv = -z_cam (forward)."""
     z_cam = np.cross(x_cam, y_cam)
     return np.stack([x_cam, -y_cam, -z_cam], axis=1)
 
 
 def backproject(depth, K, max_depth=2.0):
-    """OpenCV-frame points of every valid pixel of a planar depth image (I.1)."""
+    """OpenCV-frame points of every valid pixel of a planar depth image."""
     h, w = depth.shape
     u, v = np.meshgrid(np.arange(w), np.arange(h))
     ok = (depth > 0) & (depth < max_depth)
@@ -68,7 +67,6 @@ def backproject(depth, K, max_depth=2.0):
     return np.stack([(u[ok] - K[0, 2]) * z / K[0, 0], (v[ok] - K[1, 2]) * z / K[1, 1], z], 1)
 
 
-# ----------------------------------------------------------------------------- RealSense D435 depth model (I.4)
 STEREO_BASELINE = 0.050   # m, D435 left-right imager baseline
 SUBPIXEL_RMS = 0.08       # px, Intel's typical D435 disparity (subpixel) RMS
 DEPTH_UNIT = 0.001        # m, z16 depth units (GraspNet-1Billion factor_depth = 1000)
@@ -77,9 +75,9 @@ EDGE_DROP = 0.5           # probability an edge pixel is invalid
 
 
 def stereo_shadow(depth_left, depth_right, K, baseline=STEREO_BASELINE, tol=0.003):
-    """Pixels of the left image whose surface point the right imager cannot see (I.4). Rectified pair: the right
-    camera is the left one moved by `baseline` along x_cam, so a left pixel (u, v) at depth z appears at
-    (u - f b / z, v) in the right image; it is occluded there if the right image sees something nearer."""
+    """Left-image pixels whose surface point the right imager can't see. Rectified pair, right camera = left
+    moved by `baseline` along x_cam, so left (u, v) at depth z lands at (u - f b / z, v); occluded if the right
+    image sees something nearer there."""
     h, w = depth_left.shape
     f = K[0, 0]
     v, u = np.mgrid[0:h, 0:w]
@@ -93,9 +91,9 @@ def stereo_shadow(depth_left, depth_right, K, baseline=STEREO_BASELINE, tol=0.00
 
 def realsense_depth(depth_left, depth_right, K, rng, baseline=STEREO_BASELINE, sigma_d=SUBPIXEL_RMS,
                     unit=DEPTH_UNIT, edge_jump=EDGE_JUMP, edge_drop=EDGE_DROP):
-    """Ideal planar depth -> what a D435 would report (I.4): stereo shadows become holes, disparity d = f b / z
-    gets N(0, sigma_d^2) noise, pixels at depth edges drop out with probability edge_drop, and depth is
-    quantized to `unit`. Invalid pixels are 0, as on the sensor."""
+    """Ideal planar depth -> what a D435 would report: stereo shadows become holes, disparity d = f b / z gets
+    N(0, sigma_d^2) noise, edge pixels drop out with probability edge_drop, depth quantized to `unit`.
+    Invalid pixels are 0, as on the sensor."""
     z = depth_left.astype(np.float64).copy()
     ok = z > 0
     fb = K[0, 0] * baseline
@@ -112,10 +110,10 @@ def realsense_depth(depth_left, depth_right, K, rng, baseline=STEREO_BASELINE, s
 
 
 def workspace_masks(world_pts, above=0.01, margin=0.02, crop=CROP, pick=PICK, table_z=TABLE_Z):
-    """(wide, tight) masks over world points, the way GraspNet-1Billion feeds its detectors without an oracle.
-    wide:  the square pick area (for the collision check: table and surroundings included)
-    tight: the footprint of everything more than `above` over the known (calibrated) table height, grown by
-           `margin` -- the authors' workspace mask uses the objects' extent plus 2 cm -- table points inside it kept."""
+    """(wide, tight) masks over world points, like GraspNet-1Billion feeds its detectors (no oracle).
+    wide:  the square pick area, table included (for the collision check)
+    tight: footprint of everything more than `above` over the known table height, grown by `margin` (their
+           workspace mask uses object extent + 2 cm), table points inside it kept."""
     w = world_pts
     wide = (np.abs(w[:, 0] - pick[0]) <= crop) & (np.abs(w[:, 1] - pick[1]) <= crop) & (w[:, 2] >= table_z - 0.01)
     up = wide & (w[:, 2] > table_z + above)
@@ -127,17 +125,16 @@ def workspace_masks(world_pts, above=0.01, margin=0.02, crop=CROP, pick=PICK, ta
 
 
 def grasps_to_world(grasps, R_wc, p_wc):
-    """graspnetAPI rows (17 columns, camera frame) -> world rotation (N,3,3) and translation (N,3) (I.2)."""
+    """graspnetAPI rows (17 columns, camera frame) -> world rotation (N,3,3) and translation (N,3)."""
     R = grasps[:, 4:13].reshape(-1, 3, 3)
     return R_wc @ R, grasps[:, 13:16] @ R_wc.T + p_wc
 
 
 def approach_ok_world(R_world, max_deg=30.0):
-    """D3: the approach axis (first column) within max_deg of straight down."""
+    """Approach axis (first column) within max_deg of straight down."""
     return R_world[:, 2, 0] <= -np.cos(np.radians(max_deg))
 
 
-# ----------------------------------------------------------------------------- objects
 def _quat_wxyz(R):
     q = np.empty(4)
     mujoco.mju_mat2Quat(q, np.asarray(R, float).ravel())
@@ -146,7 +143,7 @@ def _quat_wxyz(R):
 
 def object_xml(tag, model_dir, ob, shift, pos, R, collision="vhacd", mu=MU, pads="grid", contact=CONTACT):
     """(assets, body) MJCF snippets for one scanned object with its hidden core at this shift.
-    pos, R: pose of the mesh frame in the world. The inertial is explicit (H.3), so geoms carry no mass."""
+    pos, R: pose of the mesh frame in the world. The inertial is explicit, so geoms carry no mass."""
     p = ob["props"][shift]
     I = p["inertia"]
     coll_dir = O.collision_dir(model_dir, collision)
@@ -190,8 +187,8 @@ BIN_REST_Z = 0.25        # an object resting in the bin has its CoM below this (
 
 
 def in_bin(p, free_of_hand=True):
-    """Did the object end up in the bin (D22)? Its CoM is inside the interior footprint and low enough to be resting
-    there (standing, lying, or leaning on a wall), and the hand has let go."""
+    """CoM inside the bin footprint and low enough to be resting there (standing, lying or leaning on a wall),
+    and the hand has let go."""
     return bool(abs(p[0] - BIN_CENTER[0]) < BIN_INNER / 2 and abs(p[1] - BIN_CENTER[1]) < BIN_INNER / 2
                 and p[2] < TABLE_Z + BIN_REST_Z and free_of_hand)
 
@@ -199,7 +196,7 @@ def in_bin(p, free_of_hand=True):
 def scene_xml(object_snippets, timestep=0.002, impratio=10, contact=CONTACT, cam_pos=CAM_POS, cam_target=PICK,
               robot=None, with_bin=False):
     x, y = look_at(cam_pos, cam_target)
-    cr = np.asarray(cam_pos) + STEREO_BASELINE * x          # the D435's right imager (I.4)
+    cr = np.asarray(cam_pos) + STEREO_BASELINE * x          # the D435's right imager
     assets = "\n".join(a for a, _ in object_snippets)
     bodies = "\n".join(b for _, b in object_snippets)
     return f"""
@@ -231,7 +228,6 @@ def scene_xml(object_snippets, timestep=0.002, impratio=10, contact=CONTACT, cam
 </mujoco>"""
 
 
-# ----------------------------------------------------------------------------- resting pose
 def _support_margin(hull_pts_world, com_world, tol=1e-3):
     """Signed distance [m] of the CoM's ground projection inside the support polygon (negative = outside)."""
     from scipy.spatial import ConvexHull

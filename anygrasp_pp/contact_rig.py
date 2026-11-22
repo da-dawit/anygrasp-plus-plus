@@ -1,20 +1,10 @@
 """Floating Franka hand + an object with a hidden weight, for checking MuJoCo contacts against the slip model.
 
-The hand hangs from a vertical slide (no arm), so only the finger-object contact is tested. The object's long
-axis is world x and the fingers close along world y, so a CoM shift d along x twists it about the closing axis.
-
-Contact ownership (docs/decisions.md D5): every object geom has priority 1, so MuJoCo takes ALL contact
-parameters (condim, friction, solref, solimp) from the object for object-pad, object-finger, object-palm and
-object-table contacts. With equal priority MuJoCo would instead take the element-wise MAX friction and a
-50/50 mix of solref/solimp, which silently ignored the pad settings and made per-object friction impossible.
-
-Pads (docs/decisions.md D4):
-  "grid"  : 4x4 contact points spread over the real 17 x 17 mm Franka fingertip face (Menagerie pad box).
-            The contact patch then follows the object's shape: full face on a flat side, a line on a handle,
-            one point on a sphere. Twisting resistance emerges from the patch (derivations A.12).
-  "point" : one sphere per finger + torsional friction mu3 = 2/3 mu a: the textbook soft-finger model,
-            implemented exactly. Used to verify the simulator, not for the study.
-  "stock" : Menagerie's 5 box pads, unchanged (for documentation only).
+No arm: the hand hangs from a vertical slide. Object long axis = world x, fingers close along world y, so a CoM
+shift d along x twists the object about the closing axis.
+Object geoms have priority 1 so MuJoCo takes all contact params from the object (equal priority mixes them).
+Pads: "grid" = 4x4 points over the 17 x 17 mm fingertip (the study), "point" = one sphere + torsional friction
+(textbook soft finger, for checking the simulator), "stock" = Menagerie's 5 boxes.
 """
 from pathlib import Path
 
@@ -37,33 +27,29 @@ GRID_R = 0.0015                 # radius of each grid point sphere [m]
 OPEN, CLOSED = 0.04, -0.01      # grip targets (tendon length = finger position); CLOSED is past contact
 CLOSE_SPEED = 0.1               # [m/s], Franka Hand max finger speed
 
-# Contact settings (decisions D4, D6). Friction is made hard by the noslip solver; noslip_iterations is a cap (the
-# solver stops at its tolerance): 20 left 0.8 deg of false creep on the grid pad; 2000, 5000 and 20000 give
-# identical results even for misaligned grasps (500 does not).
-# Nominal fingertip = thin rubber layer: 70 N over 17 x 17 mm is 0.24 MPa; a 2 mm layer with E ~ 3 MPa compresses
-# ~0.16 mm. These settings sink 0.11 mm on the 0.6 kg box. RIGID_CONTACT (0.003-0.007 mm) = hard plastic pads,
-# kept as a sensitivity case because misaligned grasps depend strongly on pad softness (appendix R.3).
-# Nominal fingertip (D20): a thin rubber layer, E = 3 MPa, h = 2 mm, modelled as a Winkler bed -- every grid point
-# is a linear spring k_c = E A_cell / h = 27.1 kN/m, so a load concentrated on a few points sinks proportionally
-# and spreads onto its neighbours, as the layer does (derivations B.6, scripts/calibrate_pad_layer.py). Constant
-# impedance (solimp d d) keeps the spring linear (K/((1-d) A_hat) per point, B.5); the direct stiffness (solref -K -b) is set so a free 1 kg object
-# sees 27.1 kN/m per point (flat sink 0.161 mm at 70 N).
+# friction is made hard by the noslip solver. noslip_iterations is only a cap (it stops at tolerance): 20 left
+# 0.8 deg of false creep on the grid pad, 2000/5000/20000 give identical results even misaligned (500 does not).
+# nominal fingertip: 2 mm rubber layer, E = 3 MPa, as a Winkler bed. each grid point is a linear spring
+# k_c = E A_cell / h = 27.1 kN/m, so a load on a few points sinks more there, like the real layer
+# (scripts/calibrate_pad_layer.py). solimp "d d" keeps the spring linear; solref "-K -b" is set so a free 1 kg
+# object sees 27.1 kN/m per point (flat sink 0.161 mm at 70 N).
 CONTACT = dict(solref="-5537.89 -148.834", solimp="0.95 0.95 0.001", noslip=2000)
-# Step-1 nominal (D6), kept for comparison: 60 kN/m per point and stiffening with depth, so misaligned or curved
-# contacts loaded only the edge rows (D19).
+# step-1 nominal, kept for comparison: 60 kN/m per point and stiffer with depth, so misaligned or curved
+# contacts only loaded the edge rows
 CONTACT_V1 = dict(solref="0.01 1", solimp="0.95 0.99 0.001", noslip=2000)
+# hard plastic pads (0.003-0.007 mm sink), sensitivity case since misaligned grasps depend a lot on pad softness
 RIGID_CONTACT = dict(solref="0.004 1", solimp="0.99 0.999 0.001", noslip=2000)
 DEFAULT_CONTACT = dict(solref=None, solimp=None, noslip=0)       # MuJoCo defaults, for comparison only
 
 
 def grid_points(n=GRID_N, half=PAD_HALF):
-    """Cell centres of an n x n grid on the square face [-half, half]^2, as (x, z) offsets from the pad centre."""
+    """(x, z) of the n x n cell centres on the pad face, relative to the pad centre."""
     c = (np.arange(n) + 0.5) / n * 2 * half - half
     return np.array([(x, z) for x in c for z in c])
 
 
 def grip_target(t, t_close):
-    """Force grip ctrl: open, then a target moving closed at CLOSE_SPEED (like Franka's grasp(width, speed, force))."""
+    """Grip ctrl: open, then a target closing at CLOSE_SPEED (like Franka's grasp(width, speed, force))."""
     return OPEN if t < t_close else max(OPEN - CLOSE_SPEED * (t - t_close), CLOSED)
 
 
@@ -87,8 +73,8 @@ def _grip_actuator(grip, fn):
         return ('<general name="grip" tendon="split" forcerange="-100 100" ctrlrange="0 255" '
                 'gainprm="0.01568627451 0 0" biasprm="0 -100 -10" dyntype="none" biastype="affine"/>')
     if grip == "force":
-        # Stiff position servo on the finger tendon, force clamped at 2 fn (derivations B.3, B.4). The target runs
-        # past the object, so once the fingers are blocked the clamp is active and each pad gets exactly fn.
+        # stiff position servo on the finger tendon, force clamped at 2 fn. the target runs past the object, so
+        # once the fingers are blocked the clamp is active and each pad gets exactly fn
         kp = 2 * fn / 0.005                      # saturates 5 mm past contact
         kv = 2 * (kp * 0.23) ** 0.5              # critical damping; 0.23 kg = tendon-space finger inertia
         return (f'<general name="grip" tendon="split" ctrlrange="{CLOSED} {OPEN}" forcerange="{-2*fn} {2*fn}" '
@@ -97,8 +83,8 @@ def _grip_actuator(grip, fn):
 
 
 def object_mu3(pads, mu, a):
-    """Torsional friction carried by each contact. The point pad needs the whole patch's twist resistance in one
-    contact (B.1); on the grid pad the resistance comes from the spread of the points, so each point gets none."""
+    """Torsional friction per contact. The point pad needs the whole patch's twist resistance in its one
+    contact; on the grid pad it comes from the spread of the points, so each point gets ~0."""
     return torsional_mu(mu, a) if pads == "point" else 1e-6
 
 
@@ -117,12 +103,11 @@ def build_xml(d, grip="force", pads="grid", mu=MU, a=A_PAD, fn=FN, mass=MASS, co
               midair=False, timestep=0.002, impratio=10, menagerie_friction=False):
     """MJCF string. d = CoM shift along the object's long axis [m].
 
-    shape "box": size = half sizes (x, y, z). shape "cylinder": size = (half length, radius), axis along x.
-    yaw_deg: object yaw about z. roll_deg: object AND hand rolled about the long axis, which tilts the closing
-    axis by roll_deg above horizontal (needs midair=True). offset: hand position relative to the object centre
-    (x along the long axis, y along the closing axis, z vertical) [m]. midair: object starts at MIDAIR_Z; the
-    trial switches gravity on only at the lift. menagerie_friction: object keeps MuJoCo's default friction
-    (reproduces "Menagerie as shipped")."""
+    shape "box": size = half sizes (x, y, z); "cylinder": size = (half length, radius), axis along x.
+    roll_deg rolls object and hand about the long axis, so the closing axis tilts up by roll_deg (needs midair).
+    offset: hand position from the object centre (x long axis, y closing axis, z up) [m].
+    midair: object starts at MIDAIR_Z, gravity only comes on at the lift.
+    menagerie_friction: MuJoCo's default object friction ("Menagerie as shipped")."""
     if roll_deg and not midair:
         raise ValueError("a rolled grasp needs midair=True (a rolled box cannot rest on the table)")
     m_hidden = mass * d / x_hidden

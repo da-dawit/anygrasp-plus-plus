@@ -1,17 +1,13 @@
-"""Two-finger grasp physics (docs/derivations.tex, sections A and C). General: any grasp pose, object, mass, friction.
+"""Two-finger grasp statics and P(hold), vectorized over N grasps (any pose, object, mass, friction).
+python -m anygrasp_pp.physics prints the nominal d* values.
 
-Model assumptions (all of them):
-  * rigid object, two opposing pads with equal normal force fn, quasi-static lift;
-  * gravity plus a vertical lift acceleration is the only load;
-  * closing axis close to horizontal (decisions.md D3: approach within 30 deg of vertical), so the weight is
-    carried by friction, not by a pad's normal force;
-  * soft-finger pad: uniform pressure over a disc of radius a, combined sliding + twisting limited by the
-    Howe-Cutkosky ellipse (A.7), an outer approximation that is at most ~0.2% optimistic at nominal values;
-  * patch pad (patch_dstar): equal load on a set of contact points, exact rigid-sliding limit surface (A.12).
-Every function is vectorized over N grasps.
+Assumes a rigid object, two opposing pads with equal normal force fn, quasi-static lift (gravity + vertical lift
+acceleration only), and a closing axis near horizontal so friction carries the weight. Soft-finger pad: uniform
+pressure disc of radius a, Howe-Cutkosky ellipse (at most ~0.2% optimistic at nominal values). Patch pad: equal
+load on a set of contact points, exact limit surface.
 
-Shapes: p (N,3) grasp centres; axis (N,3) or (3,) closing axes (any non-zero length; normalized here);
-        c (3,) CoM estimate; cov (3,3) its covariance. mu, fn, a, m, accel: scalars or arrays of shape (N,).
+Shapes: p (N,3) grasp centres; axis (N,3) or (3,) closing axes (normalized here); c (3,) CoM estimate,
+cov (3,3) its covariance; mu, fn, a, m, accel scalars or (N,).
 """
 import numpy as np
 
@@ -20,15 +16,14 @@ from scipy.stats import norm
 G = 9.81
 EZ = np.array([0.0, 0.0, 1.0])
 
-# Nominal values for THIS study (docs/derivations.tex A.1). Defaults only; other values can be passed for anything else.
+# nominal values for this study, defaults only
 MU = 0.5          # pad-object friction
 FN = 70.0         # normal force per pad [N] (Franka Hand continuous grasp force)
 A_PAD = 0.006     # soft-finger contact patch radius [m] (point-pad model only)
 MASS = 0.6        # object mass used in the hidden-weight experiment [kg]
-MAX_TILT_DEG = 30.0   # grasps allowed: approach within this angle of straight down (decisions.md D3)
+MAX_TILT_DEG = 30.0   # grasps allowed: approach within this angle of straight down
 
 
-# ---------------------------------------------------------------------------------------------- helpers
 def _unit_axes(axis):
     axis = np.atleast_2d(np.asarray(axis, float))
     n = np.linalg.norm(axis, axis=-1, keepdims=True)
@@ -46,32 +41,30 @@ def _per_grasp(x, n, name):
 
 
 def approach_ok(approach, max_deg=MAX_TILT_DEG):
-    """True where the approach direction is within max_deg of straight down (decisions.md D3).
-    Then the closing axis (perpendicular to the approach) is within max_deg of horizontal."""
+    """True where the approach is within max_deg of straight down (so the closing axis is within max_deg of
+    horizontal)."""
     ap = _unit_axes(approach)
     return ap @ -EZ >= np.cos(np.radians(max_deg)) - 1e-12
 
 
-# ---------------------------------------------------------------------------------------------- A: statics
 def torsional_mu(mu=MU, a=A_PAD):
-    """MuJoCo torsional friction (a length) for a uniform-pressure disc pad: mu3 = 2/3 mu a  (A.4, B.1)."""
+    """MuJoCo torsional friction (a length) for a uniform-pressure disc pad: mu3 = 2/3 mu a."""
     return 2.0 / 3.0 * np.asarray(mu) * a
 
 
 def hinge_vector(axis):
-    """h = e_z x a_hat. Horizontal, perpendicular to the closing axis; |h| = cos(tilt of the axis) (A.2, A.3)."""
+    """h = e_z x a_hat: horizontal, perpendicular to the closing axis, |h| = cos(axis tilt)."""
     return np.cross(EZ, _unit_axes(axis))
 
 
 def lever_arm(p, axis, c):
-    """Signed lever arm d = (c - p) . h of gravity about the closing axis (A.2). |d| twists the object."""
+    """Signed lever arm d = (c - p) . h of gravity about the closing axis."""
     return np.einsum("ij,ij->i", np.atleast_2d(c) - np.atleast_2d(p), hinge_vector(axis))
 
 
 def dstar(mu=MU, fn=FN, a=A_PAD, m=MASS, accel=0.0, g=G, exact=True):
-    """Largest |d| a soft-finger pad pair can hold (A.8). accel = upward lift acceleration (A.6). Broadcasts.
-
-    Returns 0 where the object would slide straight down (m (g + accel) >= 2 mu fn), in both forms."""
+    """Largest |d| a soft-finger pad pair can hold. accel = upward lift acceleration. Broadcasts.
+    0 where the object would slide straight down (m (g + accel) >= 2 mu fn)."""
     mu, fn, a, m, accel = np.broadcast_arrays(*map(np.asarray, (mu, fn, a, m, accel)))
     w = m * (g + accel)                                    # effective weight
     x = w / (2.0 * mu * fn)
@@ -81,7 +74,7 @@ def dstar(mu=MU, fn=FN, a=A_PAD, m=MASS, accel=0.0, g=G, exact=True):
 
 
 def required_grip(d, m, mu=MU, a=A_PAD, accel=0.0, g=G, margin=1.0):
-    """Smallest per-pad normal force that holds lever arm d with a soft-finger pad (A.10), times a margin.
+    """Smallest per-pad normal force that holds lever arm d with a soft-finger pad, times a margin.
 
     fn_min = (m g_eff / mu) * sqrt(1/4 + (3 d / (4 a))^2)."""
     w = np.asarray(m) * (g + np.asarray(accel))
@@ -89,13 +82,13 @@ def required_grip(d, m, mu=MU, a=A_PAD, accel=0.0, g=G, margin=1.0):
 
 
 def patch_torque_capacity(points, f_up, mu=MU, fn=FN, weights=None):
-    """Largest twisting moment one pad can resist while also pushing up with f_up (A.12).
+    """Largest twisting moment one pad can resist while also pushing up with f_up.
 
     points: (K,2) contact points (x along the long axis, z up) relative to the pad centre; each carries normal
     load n_k = fn * weights_k (equal by default) and Coulomb friction |f_k| <= mu n_k. Exact, by convex duality:
         T_max = min over c in R^2 of  sum_k mu n_k |p_k - c|  +  c_x f_up,
-    where the minimizing c is the centre the object would turn about when it starts to slip. Works for any
-    point set (full face, a line of points, off-centre patches)."""
+    where the minimizing c is the point the object turns about when it starts to slip. Any point set works
+    (full face, a line of points, off-centre patches)."""
     pts = np.asarray(points, float)
     w = np.full(len(pts), 1.0 / len(pts)) if weights is None else np.asarray(weights, float) / np.sum(weights)
     if f_up >= mu * fn * (1 - 1e-12):
@@ -125,17 +118,16 @@ def patch_torque_capacity(points, f_up, mu=MU, fn=FN, weights=None):
 
 
 def patch_dstar(points, mu=MU, fn=FN, m=MASS, accel=0.0, g=G, weights=None):
-    """Largest |d| a pair of identical patch pads can hold (A.12). Each pad pushes up with W/2 and resists
-    W d / 2 of twist (equal sharing is optimal, A.5), so d* = 2 T_max(W/2) / W. Returns 0 if W/2 >= mu fn."""
+    """Largest |d| a pair of identical patch pads can hold. Each pad pushes up with W/2 and resists W d / 2 of
+    twist (equal sharing is optimal), so d* = 2 T_max(W/2) / W. 0 if W/2 >= mu fn."""
     w = m * (g + accel)
     if w / 2 >= mu * fn:
         return 0.0
     return 2.0 * patch_torque_capacity(points, w / 2, mu, fn, weights) / w
 
 
-# ---------------------------------------------------------------------------------------------- C: scoring
 def p_hold(p, axis, c, cov, m, mu=MU, fn=FN, a=A_PAD, accel=0.0, ds=None):
-    """Probability each grasp holds, CoM belief Gaussian N(c, cov) (C.2, C.3). Used after the test lift.
+    """P(hold) per grasp for a Gaussian CoM belief N(c, cov). Used after the test lift.
 
     d_i ~ N(mu_d, sigma_d^2), mu_d = (c - p_i).h_i, sigma_d^2 = h_i^T cov h_i;  P = Pr(|d_i| <= d*).
     ds: optional per-grasp d* (e.g. from patch_dstar); default is the soft-finger dstar."""
@@ -151,7 +143,7 @@ def p_hold(p, axis, c, cov, m, mu=MU, fn=FN, a=A_PAD, accel=0.0, ds=None):
 
 
 def _uniform_sum_cdf(t, alpha, beta):
-    """CDF of X + Y, X ~ U[-alpha, alpha], Y ~ U[-beta, beta] independent (C.5: trapezoid)."""
+    """CDF of X + Y, X ~ U[-alpha, alpha], Y ~ U[-beta, beta] independent (a trapezoid density)."""
     t, alpha, beta = np.broadcast_arrays(*map(np.asarray, (t, alpha, beta)))
     hi, lo = np.maximum(alpha, beta), np.minimum(alpha, beta)
     r2 = lambda u: np.maximum(u, 0.0) ** 2
@@ -165,7 +157,7 @@ def _uniform_sum_cdf(t, alpha, beta):
 
 
 def p_hold_uniform(p, axis, c0, V, half_extents, m, mu=MU, fn=FN, a=A_PAD, accel=0.0, ds=None):
-    """Exact P_hold for the pre-touch prior: CoM uniform on a rectangle (C.1, C.5), no Gaussian approximation.
+    """Exact P_hold for the pre-touch prior, CoM uniform on a rectangle (no Gaussian approximation).
 
     c0 (3,) rectangle centre; V (3,2) its two horizontal unit axes as columns; half_extents (L/2, W/2)."""
     h = hinge_vector(axis)
@@ -180,7 +172,7 @@ def p_hold_uniform(p, axis, c0, V, half_extents, m, mu=MU, fn=FN, a=A_PAD, accel
 
 
 def margin(p, axis, c, m, mu=MU, fn=FN, a=A_PAD, accel=0.0):
-    """Deterministic margin rho = 1 - |d| / d* (C.4, F.2). Negative = predicted to twist out; -inf if d* = 0."""
+    """Margin rho = 1 - |d| / d*. Negative = predicted to twist out; -inf if d* = 0."""
     ds = dstar(mu, fn, a, m, accel)
     d = np.abs(lever_arm(p, axis, c))
     with np.errstate(divide="ignore"):

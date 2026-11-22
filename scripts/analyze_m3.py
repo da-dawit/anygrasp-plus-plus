@@ -1,9 +1,6 @@
-"""M3 results (D26): AnyGrasp++ against B0 + blind retry on the same scenes, with object-bootstrap intervals, plus two
-checks of the test lift itself:
-
-  - the CoM it measures, against the true one, when the hand carried the whole object
-  - its trigger: every first grasp was also executed without a test lift in the candidates run, so we know whether
-    the grasps it gave up on would have failed and whether the ones it kept would have succeeded
+"""M3 results: AnyGrasp++ vs B0 and B0 + blind retry on the same scenes, object-bootstrap CIs.
+Also checks the test lift: measured CoM vs true, and whether the grasps it gave up on would really have failed
+(every first grasp was also run without a test lift in the candidates run).
 
     python scripts/analyze_m3.py --m3 results/m3_dev --cands results/b0_m045_v2 --out results/midpoint/m3_dev.json
 """

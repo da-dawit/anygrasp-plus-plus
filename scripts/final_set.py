@@ -1,6 +1,5 @@
-"""Assemble the study's object set from the graspability tests (D16, D17): every object, from either library,
-that has CoACD collision pieces, a resting pose stable at every shift, and >= 1 usable top-down GSNet grasp at
-every yaw with the D435 depth model. Writes results/objects/final_set.csv.
+"""Final object set (GSO + YCB) from the graspability tests: CoACD pieces, a rest pose stable at every shift, and
+usable top-down GSNet grasps at every yaw with the D435 depth model. Writes results/objects/final_set.csv.
 
     python scripts/final_set.py
 """

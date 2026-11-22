@@ -1,8 +1,8 @@
-"""Numbers for the M3 test lift from the real Menagerie Panda (derivations E.2, E.5): CoM accuracy from joint
-torques at realistic lift poses, joint motion of a 2 cm lift, and the bias the tare leaves with link-mass errors.
+"""Numbers for the M3 test lift on the Menagerie Panda: CoM accuracy from joint torques at realistic lift poses,
+joint motion of a 2 cm lift, and the CoM bias the tare leaves when the link masses are off.
 
     python scripts/panda_m3_numbers.py
-Outputs: results/m3/numbers.json, numbers.tex (LaTeX macros used by docs/derivations.tex)
+Outputs: results/m3/numbers.json, numbers.tex (LaTeX macros)
 """
 import json
 import sys
@@ -39,7 +39,7 @@ def jac(m, d):
 
 
 def ik(m, d, p_target, yaw, q0=HOME, iters=500):
-    """Damped least squares (D.2): grasp point at p_target, hand pointing down, rotated by yaw."""
+    """Damped least squares IK: grasp point at p_target, hand pointing down, rotated by yaw."""
     R_t = Rot.from_euler("z", yaw).as_matrix() @ np.diag([1.0, -1.0, -1.0])
     d.qpos[:7] = q0
     lo, hi = m.jnt_range[:7, 0], m.jnt_range[:7, 1]
@@ -81,7 +81,7 @@ def main():
                     poses.append((q0, q1))
     print(f"{len(poses)} lift poses solved (grasp point at x 0.4-0.6 m, y +-0.15 m, z 5 cm, yaw 0/45/90 deg)")
 
-    # E.5: CoM accuracy. Angular block of (J J^T)^-1, horizontal entries, at the lift pose.
+    # CoM accuracy: horizontal entries of the angular block of (J J^T)^-1 at the lift pose
     lam, lam_nocouple, covs = [], [], []
     for q0, q1 in poses:
         d.qpos[:7] = q1
@@ -116,7 +116,7 @@ def main():
             break
     res["samples_for_1cm_at_0.5"] = need
 
-    # E.2: joint motion of the 2 cm lift, and the tare residual with link-mass errors
+    # joint motion of the 2 cm lift, and the tare residual with link masses off by up to 5%
     dq = [np.abs(q1 - q0).max() for q0, q1 in poses]
     res["lift_dq_max_rad_median"] = float(np.median(dq))
     res["lift_dq_max_rad_range"] = [float(min(dq)), float(max(dq))]

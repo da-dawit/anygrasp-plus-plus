@@ -1,23 +1,15 @@
-"""M2: score a grasp before touching the object (proposal M2; decisions D9, D22; derivations C.6).
+"""M2: score a grasp before touching the object, using only the D435 cloud, the grasp and the robot model.
 
-Two predictions from what the robot can observe (the D435 cloud, the grasp, the robot model):
-
-1. the contact patch, by a "virtual squeeze" of the rubber-layer pad (B.6) against the observed surface:
-   per fingertip, the cloud points in the pad's 17 x 17 mm footprint are expressed in the hand frame, the surface
-   distance along the closing axis is fitted by least squares (the cloud is noisier than the pad's sink), the pad
-   stops at the outermost surface point, every grid cell with observed material engages by its gap (Winkler), and
-   the patch's twist capacity (A.12) gives this grasp's slip distance d*_pred = (T_left + T_right) / W (A.5);
-2. the centre of mass, from the visible shape: the middle of the object's footprint, with the uncertainty of a
-   uniform prior over the footprint (C.5) -- before touching it, nothing tells the robot where a hidden weight is.
-
-Score = detector score x P(hold), P(hold) = P(|d| < d*_pred) under the CoM prior (C.5, D9).
+Patch: squeeze the rubber pad model against the observed surface -> this grasp's slip distance d*_pred.
+CoM: uniform over the visible footprint, since nothing seen says where a hidden weight is.
+Score = detector score x P(|d| < d*_pred).
 """
 import numpy as np
 
 from . import physics as P
 from .contact_rig import GRID_N, PAD_HALF, grid_points
 
-K_CELL = 3.0e6 * (2 * PAD_HALF / GRID_N) ** 2 / 0.002      # B.6: E A_cell / h
+K_CELL = 3.0e6 * (2 * PAD_HALF / GRID_N) ** 2 / 0.002      # E A_cell / h, 2 mm rubber layer [N/m]
 FN = 70.0
 MIN_PTS = 12              # fewer points than this in a pad's footprint: that side is treated as unseen
 CELL_SUPPORT = 0.003      # a grid cell has material if an observed point lies within this of it (pad plane) [m]
@@ -25,7 +17,7 @@ TABLE_CLEAR = 0.004       # cloud points this close to the table belong to the t
 
 
 def winkler_forces(gaps, F=FN, k=K_CELL):
-    """Forces of a Winkler bed pressed with total F against gaps (inf = no material). B.6."""
+    """Cell forces of a Winkler bed pressed with total F against gaps (inf = no material)."""
     gaps = np.asarray(gaps, float)
     ok = np.isfinite(gaps)
     if not ok.any():
@@ -82,8 +74,8 @@ def pad_patch(pts_hand, side, w_open, cell_world_z=None, table_z=0.0):
 
 
 def predicted_dstar(pts_world, p_tcp, R_tcp, w_open, mass, mu=P.MU, accel=0.0):
-    """This grasp's predicted slip distance [m] from the cloud (C.6). Unseen sides mirror the seen one; if neither
-    pad sees enough of the surface the grasp gets the one-point (worst) value 0."""
+    """Predicted slip distance d* [m] for this grasp from the cloud. An unseen side mirrors the seen one; if
+    neither pad sees enough surface, d* = 0 (one-point worst case)."""
     q = (pts_world - p_tcp) @ R_tcp
     W = mass * (P.G + accel)
     g = grid_points()
@@ -107,14 +99,13 @@ def predicted_dstar(pts_world, p_tcp, R_tcp, w_open, mass, mu=P.MU, accel=0.0):
 
 
 def object_points(pts_world, table_z=0.0):
-    """The object's points: everything clearly above the table in the workspace crop."""
+    """Cloud points clearly above the table."""
     return pts_world[pts_world[:, 2] > table_z + TABLE_CLEAR]
 
 
 def com_prior(obj_pts):
-    """Uniform CoM prior over the visible footprint (C.5), in the form physics.p_hold_uniform takes: centre c0
-    (middle of the footprint along its principal axes, at half the visible height), V (3, 2) the footprint's
-    horizontal principal axes as columns, and the half extents (2,) along them."""
+    """Uniform CoM prior over the visible footprint, as physics.p_hold_uniform takes it: c0 (footprint middle,
+    at half the visible height), V (3, 2) horizontal principal axes as columns, half extents (2,) along them."""
     xy = obj_pts[:, :2]
     c = xy.mean(0)
     _, _, vt = np.linalg.svd(xy - c, full_matrices=False)

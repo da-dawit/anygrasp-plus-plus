@@ -1,9 +1,5 @@
-"""Calibrated M2 (D23): a small logistic model over physics quantities the robot can observe before touching the
-object, evaluated leave-one-object-out on the executed candidates, so the model that ranks an object's grasps has
-never seen that object. Re-ranking is then scored exactly as in eval_rerank.py (the picked grasp's recorded outcome).
-
-Features (all observable): predicted d* (cloud virtual squeeze, C.6), lever arm about the visible centre, their
-ratio, the uniform-prior P(hold) (C.5), the detector score, the approach angle, the reported width and depth.
+"""Calibrated M2: small logistic model on features the robot can see before touching the object (FEATS),
+scored leave-one-object-out on the executed candidates, re-ranking scored like eval_rerank.py.
 
     python scripts/m2_learn.py --run results/b0_m045_v2
 """

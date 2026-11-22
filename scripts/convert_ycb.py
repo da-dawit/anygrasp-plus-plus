@@ -1,12 +1,6 @@
-"""Copy the YCB object scans (google_16k: textured 16k-face meshes, in metres) into the same layout as the MuJoCo
-scanned-objects library, so every object script reads both sets the same way:
-
-    <out>/<name>/model.obj        (textured.obj)
-    <out>/<name>/textured.mtl, texture_map.png   (as referenced by the OBJ)
-    <out>/<name>/texture.png      (copy, the name the scene builder uses)
-
-Collision pieces are made separately (scripts/make_collision.py, CoACD).
-YCB object and model set: Calli et al., IEEE RAM 2015; CC-BY 4.0.
+"""Copy the YCB google_16k scans (metres) into the MuJoCo scanned-objects layout so the object scripts read both
+sets the same way: <out>/<name>/model.obj, textured.mtl, texture_map.png, plus texture.png (what the scene builder
+looks for). Collision pieces come from make_collision.py. YCB: Calli et al., IEEE RAM 2015, CC-BY 4.0.
 
     python scripts/convert_ycb.py --raw <dir with <name>/google_16k/> --out <models dir>
 """

@@ -1,15 +1,14 @@
 """End-to-end check of the detector cache on the authors' example scene (graspnet-baseline/doc/example_data,
-a RealSense D435 capture at 1280x720).
+RealSense D435, 1280x720).
 
-    make   -> builds <scenes>/example.npz from the depth image, exactly as graspnet-baseline/demo.py does
-    check  -> sanity statistics per detector, a rerun-determinism comparison, and an overlay PNG
+    python gpu/example_check.py make     # <scenes>/example.npz from the depth image, same as demo.py
+    python gpu/example_check.py check [--rerun DIR] [--png out.png]   # stats, rerun comparison, overlay
 
-Statistics reported for the best K collision-free, NMS-filtered grasps of each detector:
-    surface distance  distance from the grasp centre t to the nearest scene point; the detectors place t on the
-                      object surface, so this should be a few millimetres
-    approach . ray    cosine between the approach axis R[:,0] and the camera ray to t; > 0 means the gripper
-                      comes from the camera side, which is the only side the camera can see
-    width             predicted opening; the Panda hand opens to 0.08 m
+Stats over the best k grasps per detector:
+    surface distance  grasp centre t to the nearest scene point; t sits on the surface, so a few mm
+    approach . ray    cos between approach axis R[:,0] and the camera ray to t; > 0 = comes from the camera side,
+                      the only side the camera can see
+    width             predicted opening; the Panda opens to 0.08 m
 """
 import argparse
 import os

@@ -1,6 +1,5 @@
-"""Check M2's predictions against executed grasps (D22): for every executed trial, predict this grasp's slip
-distance from the D435 cloud alone (m2.predicted_dstar) and compare it with the one measured from the contacts the
-simulator actually made (run_b0.contact_dstar), and see how well each predicts whether the grasp held.
+"""Compare the slip distance M2 predicts from the D435 cloud alone with the one measured from the sim contacts
+(run_b0.contact_dstar), and how well each predicts whether the grasp held. Writes <run>/m2_validation.csv.
 
     python scripts/validate_m2.py --run results/b0_m045 --trials trials.csv
 """
